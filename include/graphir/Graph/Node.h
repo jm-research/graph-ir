@@ -181,10 +181,8 @@ class Node {
     return make_range(inputs_.begin() + num_value_input_,
                       inputs_.begin() + num_value_input_ + num_control_input_);
   }
-  input_iterator control_input_begin(){
-      return control_inputs().begin()} input_iterator control_input_end() {
-    return control_inputs().end();
-  }
+  input_iterator control_input_begin() { return control_inputs().begin(); }
+  input_iterator control_input_end() { return control_inputs().end(); }
 
   iterator_range<input_iterator> effect_inputs() {
     return make_range(inputs_.begin() + num_value_input_ + num_control_input_,

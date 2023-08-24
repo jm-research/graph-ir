@@ -3,7 +3,7 @@
 
 #include <type_traits>
 
-namespace gross {
+namespace graphir {
 
 template <bool B, class T = void>
 using enable_if_t = typename std::enable_if<B, T>::type;
@@ -19,6 +19,6 @@ struct enable_if_v<true, VT, V> {
 template <bool B, class T, class F>
 using conditional_t = typename std::conditional<B, T, F>::type;
 
-}  // end namespace gross
+}  // namespace graphir
 
 #endif  // GRAPHIR_SUPPORT_TYPE_TRAITS_H
