@@ -23,11 +23,11 @@ class SubGraph {
 
   typename Use::BuilderFunctor::PatcherTy edge_patcher_;
 
+ public:
   using node_iterator = lazy_node_iterator<SubGraph, false>;
   using const_node_iterator = lazy_node_iterator<SubGraph, true>;
   using edge_iterator = lazy_edge_iterator<SubGraph>;
 
- public:
   SubGraph() : tail_node_(nullptr), edge_patcher_(nullptr) {}
   explicit SubGraph(Node* tail) : tail_node_(tail) {}
 
@@ -113,13 +113,13 @@ class Graph {
   NodeMarker<uint16_t>* node_idx_marker_;
   uint16_t node_idx_counter_;
 
+ public:
   using node_iterator = typename decltype(nodes_)::iterator;
   using const_node_iterator = typename decltype(nodes_)::const_iterator;
   using edge_iterator = lazy_edge_iterator<Graph>;
   using subregion_iterator = typename decltype(sub_regions_)::iterator;
   using global_var_iterator = typename decltype(global_variables_)::iterator;
 
- public:
   Graph()
       : dead_node_(nullptr),
         marker_max_(0),
@@ -177,13 +177,9 @@ class Graph {
   void AddSubRegion(SubGraph&& sg);
   void AddSubRegion(const SubGraph& sg);
 
-  size_t GetNumConstStr() const {
-    return const_str_pool_.size();
-  }
+  size_t GetNumConstStr() const { return const_str_pool_.size(); }
 
-  size_t GetNumConstNumber() const {
-    return const_number_pool_.size();
-  }
+  size_t GetNumConstNumber() const { return const_number_pool_.size(); }
 
   void DumpGraphviz(std::ostream& os);
 };

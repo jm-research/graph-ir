@@ -93,9 +93,6 @@ class Node {
 
   bool is_killed_;
 
-  using input_iterator = typename decltype(inputs_)::iterator;
-  using const_input_iterator = typename decltype(inputs_)::const_iterator;
-
   inline Use::Kind inputUseKind(unsigned raw_input_idx) {
     assert(raw_input_idx < inputs_.size());
     if (raw_input_idx < num_value_input_) {
@@ -119,6 +116,9 @@ class Node {
 
  public:
   using MarkerTy = uint32_t;
+
+  using input_iterator = typename decltype(inputs_)::iterator;
+  using const_input_iterator = typename decltype(inputs_)::const_iterator;
 
   IrOpcode::ID getOp() const { return op_; }
 
@@ -272,7 +272,7 @@ class Node {
        const std::vector<Node*>& effects = {});
 
   bool ReplaceUseOfWith(Node* from, Node* to, Use::Kind use_kind);
-  bool ReplaceWith(Node* replacement, Use::Kind use_kind = Use::K_VALUE);
+  void ReplaceWith(Node* replacement, Use::Kind use_kind = Use::K_VALUE);
 };
 
 template <typename ValueT>
