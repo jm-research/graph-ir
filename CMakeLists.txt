@@ -43,3 +43,5 @@ add_library(${STATIC_LIB_NAME} STATIC ${GRAPHIR_SRCS})
 target_link_libraries(${STATIC_LIB_NAME})
 target_include_directories(${STATIC_LIB_NAME} SYSTEM PRIVATE include)
 target_include_directories(${STATIC_LIB_NAME} SYSTEM PRIVATE ${BOOST_INCLUDE_DIRS})
+
+add_subdirectory(unittests)
