@@ -1,6 +1,7 @@
 #ifndef GRAPHIR_GRAPH_NODE_H
 #define GRAPHIR_GRAPH_NODE_H
 
+#include <boost/container_hash/hash.hpp>
 #include <boost/iterator/filter_iterator.hpp>
 #include <cstdint>
 #include <functional>
@@ -9,7 +10,6 @@
 #include <vector>
 
 #include "graphir/Graph/Opcodes.h"
-#include "graphir/Support/Hash.h"
 #include "graphir/Support/Log.h"
 #include "graphir/Support/iterator_range.h"
 
@@ -164,7 +164,7 @@ class Node {
   }
 
   iterator_range<const_input_iterator> inputs() const {
-    return make_range(inputs_.begin(), inputs_.end());
+    return make_range(inputs_.cbegin(), inputs_.cend());
   }
 
   input_iterator input_begin() { return inputs_.begin(); }
@@ -288,7 +288,7 @@ class NodeBiMap {
                : nullptr;
   }
 
-  Node* find_node(ValueT value) const {
+  Node* find_node(const ValueT& value) const {
     return value_to_node_.count(value)
                ? const_cast<Node*>(value_to_node_.at(value))
                : nullptr;
@@ -327,10 +327,12 @@ template <>
 struct hash<graphir::Use> {
   using arg_type = graphir::Use;
   using result_type = size_t;
-  size_t operator()(const graphir::Use& use) const {
+  result_type operator()(const arg_type& use) const noexcept {
     result_type seed = 0;
-    return hash_combine(seed, use.source) ^ hash_combine(seed, use.dest) ^
-           hash_combine(seed, use.dep_kind);
+    boost::hash_combine(seed, use.source);
+    boost::hash_combine(seed, use.dest);
+    boost::hash_combine(seed, use.dep_kind);
+    return seed;
   }
 };
 

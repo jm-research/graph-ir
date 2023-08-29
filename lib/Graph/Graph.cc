@@ -1,10 +1,11 @@
 #include "graphir/Graph/Graph.h"
 
+#include "graphir/Graph/BGL.h"
+
 #include <algorithm>
 #include <boost/graph/graphviz.hpp>
 #include <iterator>
 
-#include "graphir/Graph/BGL.h"
 #include "graphir/Graph/NodeMarker.h"
 #include "graphir/Graph/NodeUtils.h"
 

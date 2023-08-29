@@ -2,7 +2,6 @@
 #define GRAPHIR_SUPPORT_GRAPH_H
 
 #include <boost/graph/properties.hpp>
-#include <boost/iterator/iterator_categories.hpp>
 #include <boost/iterator/iterator_facade.hpp>
 #include <set>
 #include <vector>

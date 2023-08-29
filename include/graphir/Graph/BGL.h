@@ -1,14 +1,13 @@
 #ifndef GRAPHIR_GRAPH_BGL_H
 #define GRAPHIR_GRAPH_BGL_H
 
-/// Defining required traits for boost graph library
 #include <iostream>
 #include <utility>
 
-#include "boost/graph/graph_traits.hpp"
-#include "boost/graph/properties.hpp"
-#include "boost/iterator/transform_iterator.hpp"
-#include "boost/property_map/property_map.hpp"
+#include <boost/graph/graph_traits.hpp>
+#include <boost/graph/properties.hpp>
+#include <boost/iterator/transform_iterator.hpp>
+#include <boost/property_map/property_map.hpp>
 #include "graphir/Graph/Graph.h"
 #include "graphir/Graph/Node.h"
 #include "graphir/Graph/NodeUtils.h"
@@ -30,7 +29,7 @@ struct graph_traits<graphir::Graph> {
   using vertex_iterator =
       boost::transform_iterator<graphir::unique_ptr_unwrapper<graphir::Node>,
                                 typename graphir::Graph::node_iterator,
-                                graphir::Node*,  // Refrence type
+                                graphir::Node*,  // Reference type
                                 graphir::Node*   // Value type
                                 >;
   using vertices_size_type = size_t;
