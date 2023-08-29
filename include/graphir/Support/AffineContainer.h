@@ -1,153 +1,180 @@
 #ifndef GRAPHIR_SUPPORT_AFFINECONTAINER_H
 #define GRAPHIR_SUPPORT_AFFINECONTAINER_H
-
 #include <array>
-#include <cassert>
 #include <functional>
 #include <list>
-#include <memory>
 #include <set>
+#include <memory>
 #include <unordered_map>
 #include <vector>
+#include <cassert>
 
 namespace graphir {
-
-template <class ContainerTy, size_t Affinity = 2>
+template<class ContainerTy,
+         size_t Affinity = 2>
 struct AffineContainer {
   using value_type = ContainerTy;
 
- protected:
-  std::set<std::unique_ptr<ContainerTy>> repo_;
+protected:
+  // TODO: release container if no longer richable
+  std::set<std::unique_ptr<ContainerTy>> Repo;
 
   struct Scope {
-    size_t parent_branch, current_branch;
-    std::array<ContainerTy*, Affinity> branches;
+    size_t ParentBranch, CurrentBranch;
+    std::array<ContainerTy*, Affinity> Branches;
 
-    Scope() : parent_branch(0), current_branch(0) {}
-    Scope(ContainerTy* init, size_t parent_br)
-        : parent_branch(parent_br), current_branch(0) {
-      branches[0] = init;
+    Scope() : ParentBranch(0), CurrentBranch(0) {}
+    Scope(ContainerTy* Init, size_t ParentBr) :
+      ParentBranch(ParentBr), CurrentBranch(0) {
+      Branches[0] = Init;
     }
 
-    size_t CurrBranch() const { return current_branch; }
+    size_t CurBranch() const {
+      return CurrentBranch;
+    }
 
-    void AddBranch(ContainerTy* container) {
-      size_t new_br = CurrBranch() + 1;
-      assert(new_br < Affinity && "Exceeding Affinity");
-      branches[new_br] = container;
-      ++current_branch;
+    void AddBranch(ContainerTy* Container) {
+      size_t NewBr = CurBranch() + 1;
+      assert(NewBr < Affinity && "new branch out-of-bound");
+      Branches[NewBr] = Container;
+      ++CurrentBranch;
     }
   };
 
-  std::list<Scope> scope_stack_;
-  using scope_iterator = typename decltype(scope_stack_)::iterator;
-  scope_iterator curr_scope_, prev_scope_;
+  // back is the stack top
+  std::list<Scope> ScopeStack;
+  using scope_iterator = typename decltype(ScopeStack)::iterator;
+  // we use std::list because we want consistent iterator
+  scope_iterator CurScope, PrevScope;
 
   ContainerTy* PrevEntry() {
-    if (prev_scope_ == scope_stack_.end() ||
-        curr_scope_ == scope_stack_.end()) {
+    if(PrevScope == ScopeStack.end() ||
+       CurScope == ScopeStack.end())
       return nullptr;
-    }
 
-    auto parent_br = curr_scope_->parent_branch;
-    return prev_scope_->branches[parent_br];
+    auto ParentBr = CurScope->ParentBranch;
+    return PrevScope->Branches.at(ParentBr);
   }
 
   void CopyOnWrite() {
-    if (PrevEntry() && CurrEntry() == PrevEntry()) {
-      const auto& orig = *PrevEntry();
-      std::unique_ptr<ContainerTy> ptr(new ContainerTy(orig));
-      curr_scope_->Branches[curr_scope_->CurrBranch()] = ptr.get();
-      repo_.insert(std::move(ptr));
+    // copy from parent if needed
+    if(PrevEntry() && CurEntry() == PrevEntry()) {
+      const auto& Orig = *PrevEntry();
+      std::unique_ptr<ContainerTy> Ptr(new ContainerTy(Orig));
+      CurScope->Branches[CurScope->CurBranch()] = Ptr.get();
+      Repo.insert(std::move(Ptr));
     }
   }
 
- public:
+public:
   AffineContainer() {
-    std::unique_ptr<ContainerTy> table_ptr(new ContainerTy());
-    scope_stack_.emplace_back(Scope(table_ptr.get(), 0));
-    repo_.insert(std::move(table_ptr));
+    // create default scope
+    std::unique_ptr<ContainerTy> TablePtr(new ContainerTy());
+    ScopeStack.push_back(Scope(TablePtr.get(), 0));
+    Repo.insert(std::move(TablePtr));
 
-    curr_scope_ = scope_stack_.begin();
-    prev_scope_ = scope_stack_.end();
+    CurScope = ScopeStack.begin();
+    PrevScope = ScopeStack.end();
   }
 
-  size_t num_scopes() const { return scope_stack_.size(); }
-
-  size_t num_entries() const { return curr_scope_->CurrBranch() + 1; }
-
-  ContainerTy* CurrEntry() {
-    if (curr_scope_ == scope_stack_.end()) {
-      return nullptr;
-    }
-    return curr_scope_->branches[curr_scope_->CurrBranch()];
+  size_t num_scopes() const {
+    return ScopeStack.size();
+  }
+  // number of branches in current scope
+  size_t num_entries() const {
+    return CurScope->CurBranch() + 1;
   }
 
-  ContainerTy* CurrEntryMutable() {
+  ContainerTy* CurEntry() {
+    if(CurScope == ScopeStack.end()) return nullptr;
+    return CurScope->Branches.at(CurScope->CurBranch());
+  }
+  ContainerTy* CurEntryMutable() {
     CopyOnWrite();
-    return CurrEntry();
+    return CurEntry();
   }
 
   void NewAffineScope() {
-    size_t curr_br = curr_scope_->CurrBranch();
-    auto* curr_table = curr_scope_->branches[curr_br];
-    prev_scope_ = curr_scope_;
-    curr_scope_ =
-        scope_stack_.insert(scope_stack_.end(), Scope(curr_table, curr_br));
+    size_t CurBr = CurScope->CurBranch();
+    auto* CurTable = CurScope->Branches.at(CurBr);
+    PrevScope = CurScope;
+    CurScope = ScopeStack.insert(ScopeStack.end(),
+                                 Scope(CurTable, CurBr));
+  }
+  // create and switch to the new branch
+  void NewBranch() {
+    CurScope->AddBranch(PrevEntry());
   }
 
-  void NewBranch() { curr_scope_->AddBranch(PrevEntry()); }
+  template<
+    class T = AffineContainer<ContainerTy,Affinity>,
+    class Func = std::function<void(T&,
+                                    const std::vector<ContainerTy*>&)>
+  >
+  void CloseAffineScope(Func Callback) {
+    assert(PrevScope != ScopeStack.end() &&
+           "cannot pop out the only scope");
+    auto& CurEntries = CurScope->Branches;
+    std::vector<ContainerTy*> Entries(
+      CurEntries.begin(),
+      CurEntries.begin() + (CurScope->CurBranch() + 1)
+    );
+    // switch to previous scope without poping the current scope
+    CurScope = PrevScope;
+    if(PrevScope == ScopeStack.end())
+      PrevScope = ScopeStack.end();
+    else
+      --PrevScope;
+    Callback(*static_cast<T*>(this), Entries);
 
-  template <
-      class T = AffineContainer<ContainerTy, Affinity>,
-      class Func = std::function<void(T&, const std::vector<ContainerTy*>&)>>
-  void CloseAffineScope(Func callback) {
-    assert(prev_scope_ != scope_stack_.end() && "Cannot close the root scope");
-    auto& curr_entries = curr_scope_->branches;
-    std::vector<ContainerTy*> entries(
-        curr_entries.begin(),
-        curr_entries.begin() + curr_scope_->CurrBranch() + 1);
-    curr_scope_ = prev_scope_;
-    if (prev_scope_ == scope_stack_.end()) {
-      prev_scope_ = scope_stack_.end();
-    } else {
-      prev_scope_--;
-    }
-    callback(*static_cast<T*>(this), entries);
-    scope_stack_.pop_back();
+    ScopeStack.pop_back();
   }
 };
 
-template <class K, class V, size_t Affinity = 2>
+template<class K, class V,
+         size_t Affinity = 2>
 class AffineRecordTable
-    : public AffineContainer<std::unordered_map<K, V>, Affinity> {
-  using BaseTy = AffineContainer<std::unordered_map<K, V>, Affinity>;
+  : public AffineContainer<std::unordered_map<K,V>, Affinity> {
+  using BaseTy = AffineContainer<std::unordered_map<K,V>, Affinity>;
 
- public:
-  using TableTy = std::unordered_map<K, V>;
+public:
+  using TableTy = std::unordered_map<K,V>;
   using table_iterator = typename TableTy::iterator;
 
   AffineRecordTable() = default;
 
   size_t num_tables() const { return BaseTy::num_entries(); }
 
-  table_iterator begin() { return BaseTy::CurEntry()->begin(); }
-  table_iterator end() { return BaseTy::CurEntry()->end(); }
+  // begin/end iterators for current table
+  table_iterator begin() {
+    return BaseTy::CurEntry()->begin();
+  }
+  table_iterator end() {
+    return BaseTy::CurEntry()->end();
+  }
   // find in current table
-  table_iterator find(const K& key) { return BaseTy::CurEntry()->find(key); }
-  size_t count(const K& key) { return BaseTy::CurEntry()->count(key); }
+  table_iterator find(const K& key) {
+    return BaseTy::CurEntry()->find(key);
+  }
+  size_t count(const K& key) {
+    return BaseTy::CurEntry()->count(key);
+  }
+  // insert new entry in current table:
+  // copy from parent then modify
+  V& operator[](const K& key) {
+    return (*BaseTy::CurEntryMutable())[key];
+  }
+  V& at(const K& key) {
+    return (*BaseTy::CurEntryMutable()).at(key);
+  }
 
-  V& operator[](const K& key) { return (*BaseTy::CurEntryMutable())[key]; }
-  V& at(const K& key) { return (*BaseTy::CurEntryMutable()).at(key); }
-
-  template <class Func = std::function<void(AffineRecordTable<K, V, Affinity>&,
-                                            const std::vector<TableTy*>&)>>
-  void CloseAffineScope(Func callback) {
-    BaseTy::template CloseAffineScope<AffineRecordTable<K, V, Affinity>, Func>(
-        callback);
+  template<
+    class Func = std::function<void(AffineRecordTable<K,V,Affinity>&,
+                                    const std::vector<TableTy*>&)>>
+  void CloseAffineScope(Func Callback) {
+    BaseTy::template CloseAffineScope<AffineRecordTable<K,V,Affinity>,
+                                      Func>(Callback);
   }
 };
-
-}  // namespace graphir
-
-#endif  // GRAPHIR_SUPPORT_AFFINECONTAINER_H
+} // end namespace graphir
+#endif

@@ -9,7 +9,7 @@
 #define VIRT_OP(OC)
 #endif
 
-VIRT_OP(DLXOps)  // All the OC starts with DLX
+VIRT_OP(DLXOps)         // All the OC starts with DLX
 
 /// Arithmetic Operations
 #ifndef DLX_ARITH_OP
@@ -27,9 +27,9 @@ DLX_ARITH_OP(BitXOR)
 DLX_ARITH_OP(BitBIC)
 DLX_ARITH_OP(Lsh)
 DLX_ARITH_OP(Ash)
-// DLX_ARITH_OP(Chk)
+//DLX_ARITH_OP(Chk)
 #undef DLX_ARITH_OP
-VIRT_OP(DLXBinOps)  // All DLX arithmetic operations with binary operands
+VIRT_OP(DLXBinOps)      // All DLX arithmetic operations with binary operands
 
 /// Memory Operations
 #ifndef DLX_MEM_OP

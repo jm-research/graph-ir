@@ -35,7 +35,7 @@ set(GRAPHIR_SRCS)
 set(STATIC_LIB_NAME ${PROJECT_NAME})
 
 file(GLOB_RECURSE LIB_PATH
-    ./lib/*/*.cc
+    ./lib/*/*.cpp
   )
 list(APPEND GRAPHIR_SRCS ${LIB_PATH})
 
@@ -44,4 +44,4 @@ target_link_libraries(${STATIC_LIB_NAME})
 target_include_directories(${STATIC_LIB_NAME} SYSTEM PRIVATE include)
 target_include_directories(${STATIC_LIB_NAME} SYSTEM PRIVATE ${BOOST_INCLUDE_DIRS})
 
-#add_subdirectory(unittests)
+add_subdirectory(unittests)

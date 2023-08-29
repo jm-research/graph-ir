@@ -18,3 +18,10 @@ graphir中有三类边:
 ---
 一个节点可以意味着一个操作或者一个外部数据(例如Argument)或者控制步骤(即所有控制节点)或者用于特殊目的的虚拟占位符(例如EffectMerge)。
 节点可以有各种依赖关系例如数据输入。
+
+优化（Optimizer）
+---
+ - **ValuePromotion**: llvm中`mem2reg`。
+ - **Peephole**: 执行许多琐碎的图约简，如常数合并。
+ - **MemoryLegalize** and **DLXMemoryLegalize**: 将内存节点合法化为以后管道中可接受的形式。
+ - **CSE** 执行公共子表达式消除。

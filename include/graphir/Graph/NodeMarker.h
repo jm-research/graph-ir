@@ -1,37 +1,42 @@
 #ifndef GRAPHIR_GRAPH_NODEMARKER_H
 #define GRAPHIR_GRAPH_NODEMARKER_H
-
 #include "graphir/Graph/Node.h"
 
 namespace graphir {
-
+// Forward declarations
 class Graph;
 
+/// scratch data inside Node that is fast to access
+/// note that there should be only one kind of NodeMarker
+/// active at a given time
 class NodeMarkerBase {
- protected:
+protected:
   using MarkerTy = typename Node::MarkerTy;
 
- private:
-  MarkerTy marker_min_, marker_max_;
+private:
+  MarkerTy MarkerMin, MarkerMax;
 
- public:
-  NodeMarkerBase(Graph& graph, unsigned num_state);
-  MarkerTy get(Node* node);
-  void set(Node* node, MarkerTy val);
+public:
+  NodeMarkerBase(Graph& G, unsigned NumState);
+
+  MarkerTy Get(Node* N);
+
+  void Set(Node* N, MarkerTy Val);
 };
 
-template <class T>
+template<class T>
 struct NodeMarker : public NodeMarkerBase {
-  NodeMarker(Graph& graph, unsigned num_state)
-      : NodeMarkerBase(graph, num_state) {}
+  NodeMarker(Graph& G, unsigned NumState)
+    : NodeMarkerBase(G, NumState) {}
 
-  T get(Node* node) { return static_cast<T>(NodeMarkerBase::get(node)); }
-  void set(Node* node, T val) {
-    NodeMarkerBase::set(node,
-                        static_cast<typename NodeMarkerBase::MarkerTy>(val));
+  T Get(Node* N) {
+    return static_cast<T>(NodeMarkerBase::Get(N));
+  }
+
+  void Set(Node* N, T Val) {
+    NodeMarkerBase::Set(N,
+                        static_cast<typename NodeMarkerBase::MarkerTy>(Val));
   }
 };
-
-}  // namespace graphir
-
-#endif  // GRAPHIR_GRAPH_NODEMARKER_H
+} // end namespace graphir
+#endif

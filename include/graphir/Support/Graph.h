@@ -1,166 +1,182 @@
 #ifndef GRAPHIR_SUPPORT_GRAPH_H
 #define GRAPHIR_SUPPORT_GRAPH_H
-
-#include <boost/graph/properties.hpp>
-#include <boost/iterator/iterator_facade.hpp>
-#include <set>
-#include <vector>
-
+#include "boost/iterator/iterator_facade.hpp"
+#include "boost/graph/properties.hpp"
 #include "graphir/Graph/Node.h"
 #include "graphir/Support/type_traits.h"
+#include <vector>
+#include <set>
 
 namespace graphir {
-
-template <class GraphT, class PropertyTag>
+// map from vertex or edge to an unique id
+template<class GraphT, class PropertyTag>
 struct graph_id_map {};
 
-template <class GraphT>
+template<class GraphT>
 class lazy_edge_iterator
-    : public boost::iterator_facade<lazy_edge_iterator<GraphT>, Use,
-                                    boost::forward_traversal_tag, Use> {
+  : public boost::iterator_facade<lazy_edge_iterator<GraphT>,
+                                  Use, // Value type
+                                  boost::forward_traversal_tag, // Traversal tag
+                                  Use // Reference type
+                                  > {
   friend class boost::iterator_core_access;
-  GraphT* graph_;
-  unsigned curr_input_;
-  typename GraphT::node_iterator curr_node_it_, end_node_it_;
+  GraphT* G;
+  unsigned CurInput;
+  typename GraphT::node_iterator CurNodeIt, EndNodeIt;
 
-  inline Node* CurrNode() const { return GraphT::GetNodeFromIt(curr_node_it_); }
-
-  inline bool isValid() const {
-    return graph_ && curr_node_it_ != end_node_it_ &&
-           curr_input_ < CurrNode()->inputs_.size();
+  // no checks!
+  inline Node* CurNode() const {
+    return GraphT::GetNodeFromIt(CurNodeIt);
   }
 
-  bool equal(const lazy_edge_iterator& other) const {
-    return graph_ == other.graph_ && curr_node_it_ == other.curr_node_it_ &&
-           (curr_input_ == other.curr_input_ || curr_node_it_ == end_node_it_);
+  inline bool isValid() const {
+    return G &&
+           CurNodeIt != EndNodeIt &&
+           CurInput < CurNode()->Inputs.size();
+  }
+
+  bool equal(const lazy_edge_iterator& Other) const {
+    return G == Other.G &&
+           CurNodeIt == Other.CurNodeIt &&
+           (CurInput == Other.CurInput ||
+            CurNodeIt == EndNodeIt);
   }
 
   void nextValidPos() {
-    while (curr_node_it_ != end_node_it_ &&
-           curr_input_ >= CurrNode()->inputs_.size()) {
-      ++curr_node_it_;
-      curr_input_ = 0;
+    while(CurNodeIt != EndNodeIt &&
+          CurInput >= CurNode()->Inputs.size()) {
+      // switch node
+      ++CurNodeIt;
+      CurInput = 0;
     }
   }
 
   void increment() {
-    ++curr_input_;
+    ++CurInput;
     nextValidPos();
   }
 
   Use dereference() const {
+    //if(!isValid()) return Use();
     assert(isValid() && "can not dereference invalid iterator");
-    auto dep_k = CurrNode()->inputUseKind(curr_input_);
-    return Use(CurrNode(), CurrNode()->inputs_[curr_input_], dep_k);
+    auto DepK = CurNode()->inputUseKind(CurInput);
+    return Use(CurNode(), CurNode()->Inputs.at(CurInput), DepK);
   }
 
- public:
-  lazy_edge_iterator() : graph_(nullptr), curr_input_(0) {}
-
-  explicit lazy_edge_iterator(GraphT* graph, bool is_end = false)
-      : graph_(graph), curr_input_(0) {
-    if (graph_) {
-      end_node_it_ = graph_->node_end();
-      if (!is_end) {
-        curr_node_it_ = graph_->node_begin();
+public:
+  lazy_edge_iterator()
+    : G(nullptr),
+      CurInput(0) {}
+  explicit lazy_edge_iterator(GraphT* graph, bool isEnd = false)
+    : G(graph),
+      CurInput(0) {
+    if(G) {
+      EndNodeIt = G->node_end();
+      if(!isEnd) {
+        CurNodeIt = G->node_begin();
         nextValidPos();
       } else {
-        curr_node_it_ = end_node_it_;
+        CurNodeIt = EndNodeIt;
       }
     }
   }
 };
 
-template <class GraphT, bool is_const,
-          class NodeT = graphir::conditional_t<is_const, const Node*, Node*>>
+// Basically a BFS traversal iterator
+template<class GraphT, bool IsConst,
+         typename NodeT = graphir::conditional_t<IsConst, const Node*, Node*>>
 class lazy_node_iterator
-    : public boost::iterator_facade<lazy_node_iterator<GraphT, is_const, NodeT>,
-                                    NodeT, boost::forward_traversal_tag,
-                                    NodeT> {
+  : public boost::iterator_facade<lazy_node_iterator<GraphT,IsConst,NodeT>,
+                                  NodeT, // Value type
+                                  boost::forward_traversal_tag, // Traversal tag
+                                  NodeT // Reference type
+                                  > {
   friend class boost::iterator_core_access;
+  std::vector<NodeT> Queue;
+  // we use ADT instead of NodeMarker because
+  // the latter will make empty iterator(i.e. default ctor)
+  // more difficult
+  std::set<NodeT> Visited;
 
-  std::vector<NodeT> queue_;
-  std::set<NodeT> visited_;
-
-  void enqueue(NodeT n) {
-    queue_.push_back(n);
-    visited_.insert(n);
+  void Enqueue(NodeT N) {
+    Queue.push_back(N);
+    Visited.insert(N);
   }
 
-  bool equal(const lazy_node_iterator& other) const {
-    if (queue_.size() != other.queue_.size()) {
-      return false;
-    }
-    if (queue_.empty()) {
-      return true;
-    }
+  bool equal(const lazy_node_iterator& Other) const {
+    if(Queue.size() != Other.Queue.size()) return false;
+    if(!Queue.size()) return true;
     // deep compare
-    for (auto I1 = queue_.cbegin(), I2 = other.queue_.cbegin(),
-              E1 = queue_.cend(), E2 = other.queue_.cend();
-         I1 != E1 && I2 != E2; ++I1, ++I2) {
-      if (*I1 != *I2) {
-        return false;
-      }
+    for(auto I1 = Queue.cbegin(), I2 = Other.Queue.cbegin(),
+             E1 = Queue.cend(), E2 = Other.Queue.cend();
+        I1 != E1 && I2 != E2; ++I1, ++I2) {
+      if(*I1 != *I2) return false;
     }
     return true;
   }
 
   NodeT dereference() const {
-    assert(!queue_.empty());
-    return queue_.front();
+    assert(!Queue.empty());
+    return Queue.front();
   }
 
   void increment() {
-    NodeT top = queue_.front();
-    queue_.erase(queue_.begin());
-    for (NodeT node : top->inputs()) {
-      if (visited_.count(node)) {
-        continue;
-      }
-      enqueue(node);
+    NodeT Top = Queue.front();
+    Queue.erase(Queue.begin());
+    for(NodeT N : Top->inputs()) {
+      if(Visited.count(N)) continue;
+      Enqueue(N);
     }
   }
 
- public:
+public:
   lazy_node_iterator() = default;
-  explicit lazy_node_iterator(NodeT end_node) { enqueue(end_node); }
+  explicit lazy_node_iterator(NodeT EndNode) {
+    Enqueue(EndNode);
+  }
 };
 
-template <class T, class VertexTy>
+// since boost::depth_first_search has some really STUPID
+// copy by value ColorMap parameter, we need some stub/proxy
+// to hold map storage across several usages.
+template<class T, class VertexTy>
 struct StubColorMap {
   using value_type = boost::default_color_type;
   using reference = value_type&;
   using key_type = VertexTy*;
   struct category : public boost::read_write_property_map_tag {};
 
-  StubColorMap(T& impl) : storage_(impl) {}
+  StubColorMap(T& Impl) : Storage(Impl) {}
   StubColorMap() = delete;
-  StubColorMap(const StubColorMap& other) = default;
+  StubColorMap(const StubColorMap& Other) = default;
 
   reference get(const key_type& key) const {
-    return const_cast<reference>(storage_.at(key));
+    return const_cast<reference>(Storage.at(key));
   }
-  void put(const key_type& key, const value_type& val) { storage_[key] = val; }
+  void put(const key_type& key, const value_type& val) {
+    Storage[key] = val;
+  }
 
- private:
-  T& storage_;
+private:
+  T& Storage;
 };
 
-template <class T, class Vertex>
-inline typename graphir::StubColorMap<T, Vertex>::reference get(
-    const graphir::StubColorMap<T, Vertex>& pmap,
-    const typename graphir::StubColorMap<T, Vertex>::key_type& key) {
+// it is very strange that both StubColorMap and graph_id_map<G,T>
+// are PropertyMapConcept, but the get() function for the former one
+// should be defined in namespace graphir :\
+/// ColorMap PropertyMap
+template<class T, class Vertex>
+inline typename graphir::StubColorMap<T,Vertex>::reference
+get(const graphir::StubColorMap<T,Vertex>& pmap,
+    const typename graphir::StubColorMap<T,Vertex>::key_type& key) {
   return pmap.get(key);
 }
 
-template <class T, class Vertex>
-inline void put(
-    graphir::StubColorMap<T, Vertex>& pmap,
-    const typename graphir::StubColorMap<T, Vertex>::key_type& key,
-    const typename graphir::StubColorMap<T, Vertex>::value_type& val) {
+template<class T, class Vertex> inline
+void put(graphir::StubColorMap<T,Vertex>& pmap,
+         const typename graphir::StubColorMap<T,Vertex>::key_type& key,
+         const typename graphir::StubColorMap<T,Vertex>::value_type& val) {
   return pmap.put(key, val);
 }
-
-}  // namespace graphir
-
-#endif  // GRAPHIR_SUPPORT_GRAPH_H
+} // end namespace graphir
+#endif

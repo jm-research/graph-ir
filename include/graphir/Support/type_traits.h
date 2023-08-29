@@ -1,24 +1,22 @@
 #ifndef GRAPHIR_SUPPORT_TYPE_TRAITS_H
 #define GRAPHIR_SUPPORT_TYPE_TRAITS_H
-
 #include <type_traits>
 
 namespace graphir {
 
-template <bool B, class T = void>
-using enable_if_t = typename std::enable_if<B, T>::type;
+/// forward porting from C++14
+template< bool B, class T = void >
+using enable_if_t = typename std::enable_if<B,T>::type;
 
-template <bool B, class VT, VT V>
+template<bool B, class VT, VT V>
 struct enable_if_v {};
 
-template <class VT, VT V>
+template<class VT, VT V>
 struct enable_if_v<true, VT, V> {
   static constexpr VT value = V;
 };
 
-template <bool B, class T, class F>
-using conditional_t = typename std::conditional<B, T, F>::type;
-
-}  // namespace graphir
-
-#endif  // GRAPHIR_SUPPORT_TYPE_TRAITS_H
+template< bool B, class T, class F>
+using conditional_t = typename std::conditional<B,T,F>::type;
+} // end namespace graphir
+#endif

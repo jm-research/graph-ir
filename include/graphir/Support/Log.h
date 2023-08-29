@@ -1,43 +1,48 @@
 #ifndef GRAPHIR_SUPPORT_LOG_H
 #define GRAPHIR_SUPPORT_LOG_H
-
+#include <iostream>
 #include <cassert>
 #include <cstdlib>
-#include <iostream>
 
-#define graphir_unreachable(MSG) assert(false && "Unreachable statement: " #MSG)
+#define graphir_unreachable(MSG) \
+  assert(false && "Unreachable statement: "#MSG)
 
 namespace graphir {
-namespace log {
+namespace Log {
+inline
+std::ostream& E() {
+  return std::cerr << "[Error] ";
+}
 
-inline std::ostream& Error() { return std::cerr << "[Error] "; }
+inline
+std::ostream& V() {
+  return std::cout << "[Verbose] ";
+}
 
-inline std::ostream& Verbose() { return std::cout << "[Verbose] "; }
-
-inline std::ostream& Debug() { return std::cout << "[Debug] "; }
-
-}  // end namespace Log
+inline
+std::ostream& D() {
+  return std::cout << "[Debug] ";
+}
+} // end namespace Log
 
 class Diagnostic {
-  bool abort_;
+  bool Abort;
+public:
+  Diagnostic() : Abort(false) {}
 
- public:
-  Diagnostic() : abort_(false) {}
-
-  std::ostream& Warning() { return log::Error() << "Warning: "; }
+  std::ostream& Warning() {
+    return Log::E() << "Warning: ";
+  }
 
   std::ostream& Error() {
-    abort_ = true;
-    return log::Error() << "Error: ";
+    Abort = true;
+    return Log::E() << "Error: ";
   }
 
   ~Diagnostic() {
-    if (abort_) {
+    if(Abort)
       std::exit(1);
-    }
   }
 };
-
-}  // namespace graphir
-
-#endif  // GRAPHIR_SUPPORT_LOG_H
+} // end namespace graphir
+#endif

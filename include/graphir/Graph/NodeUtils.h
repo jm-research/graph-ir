@@ -1,18 +1,13 @@
-#ifndef GRAPHIR_GRAPH_NODEUTILS_H
-#define GRAPHIR_GRAPH_NODEUTILS_H
-
+#ifndef GRAPHIR_GRAPH_NODE_UTILS_H
+#define GRAPHIR_GRAPH_NODE_UTILS_H
+#include "graphir/Graph/NodeUtilsBase.h"
+#include "graphir/Graph/Attribute.h"
+#include "graphir/Support/STLExtras.h"
+#include "graphir/Support/type_traits.h"
+#include "graphir/Support/iterator_range.h"
 #include <string>
 
-#include "graphir/Graph/Attribute.h"
-#include "graphir/Graph/NodeUtilsBase.h"
-#include "graphir/Support/STLExtras.h"
-#include "graphir/Support/iterator_range.h"
-#include "graphir/Support/type_traits.h"
-
 namespace graphir {
-
-// clang-format off
-
 NODE_PROPERTIES(ConstantInt) {
   NodeProperties(Node *N)
     : NODE_PROP_BASE(ConstantInt, N) {}
@@ -20,7 +15,7 @@ NODE_PROPERTIES(ConstantInt) {
   template<typename T>
   T as(const Graph& G) const {
     if(!*this) return T();
-    if(auto* V = G.const_number_pool_.find_value(node_ptr_))
+    if(auto* V = G.ConstNumberPool.find_value(NodePtr))
       return static_cast<T>(*V);
     else
       return T();
@@ -32,13 +27,13 @@ NODE_PROPERTIES(ConstantStr) {
 
   const std::string& str(const Graph& G) const {
     assert(*this && "Invalid Node");
-    const auto* V = G.const_str_pool_.find_value(node_ptr_);
+    const auto* V = G.ConstStrPool.find_value(NodePtr);
     assert(V && "string not found");
     return *V;
   }
   const std::string str_val(const Graph& G) const {
     if(!*this) return "";
-    if(const auto* V = G.const_str_pool_.find_value(node_ptr_))
+    if(const auto* V = G.ConstStrPool.find_value(NodePtr))
       return *V;
     else
       return "";
@@ -51,7 +46,7 @@ NODE_PROPERTIES(FunctionStub) {
 
   Node* getFunctionStart(const Graph& G) const {
     assert(*this && "Invalid node");
-    auto* SGPtr = G.func_stub_pool_.find_value(node_ptr_);
+    auto* SGPtr = G.FuncStubPool.find_value(NodePtr);
     assert(SGPtr && "subgraph not found");
     auto& SG = *SGPtr;
     auto* EndNode = SubGraph::GetNodeFromIt(SG.node_begin());
@@ -70,7 +65,7 @@ NODE_PROPERTIES(FunctionStub) {
     if(!Func)
       Func = getFunctionStart(G);
     assert(Func);
-    auto& Attrs = G.attributes_;
+    auto& Attrs = G.Attributes;
     if(!Attrs.count(Func)) return false;
     for(auto& AttrPtr : Attrs.at(Func)) {
       if(AttrPtr->Kind() == AT) return true;
@@ -84,24 +79,24 @@ NODE_PROPERTIES(Call) {
     : NODE_PROP_BASE(Call, N) {}
 
   Node* getFuncStub() const {
-    assert(node_ptr_->getNumValueInput() > 0);
-    return node_ptr_->getValueInput(0);
+    assert(NodePtr->getNumValueInput() > 0);
+    return NodePtr->getValueInput(0);
   }
 
   size_t getNumParameters() const {
-    assert(node_ptr_->getNumValueInput() > 0);
-    return node_ptr_->getNumValueInput() - 1;
+    assert(NodePtr->getNumValueInput() > 0);
+    return NodePtr->getNumValueInput() - 1;
   }
 
   using param_iterator = typename Node::input_iterator;
   param_iterator param_begin() {
-    return std::next(node_ptr_->value_input_begin(), 1);
+    return std::next(NodePtr->value_input_begin(), 1);
   }
   param_iterator param_end() {
-    return node_ptr_->value_input_end();
+    return NodePtr->value_input_end();
   }
-  iterator_range<param_iterator> params() {
-    return make_range(param_begin(), param_end());
+  llvm::iterator_range<param_iterator> params() {
+    return llvm::make_range(param_begin(), param_end());
   }
 };
 
@@ -110,15 +105,15 @@ NODE_PROPERTIES(VirtSrcDecl) {
     : NODE_PROP_BASE(VirtSrcDecl, N) {}
 
   operator bool() const {
-    if(!node_ptr_) return false;
-    auto Op = node_ptr_->getOp();
+    if(!NodePtr) return false;
+    auto Op = NodePtr->getOp();
     return Op == IrOpcode::SrcVarDecl ||
            Op == IrOpcode::SrcArrayDecl;
   }
 
   Node* getSymbolName() const {
-    assert(node_ptr_->getNumValueInput() > 0);
-    return node_ptr_->getValueInput(0);
+    assert(NodePtr->getNumValueInput() > 0);
+    return NodePtr->getValueInput(0);
   }
 
   const std::string& ident_name(const Graph& G) const {
@@ -134,7 +129,7 @@ NODE_PROPERTIES_VIRT(SrcVarDecl, VirtSrcDecl) {
     : NODE_PROP_VIRT(VirtSrcDecl, N) {}
 
   operator bool() const {
-    return node_ptr_ && node_ptr_->getOp() == IrOpcode::SrcVarDecl;
+    return NodePtr && NodePtr->getOp() == IrOpcode::SrcVarDecl;
   }
 };
 
@@ -143,23 +138,23 @@ NODE_PROPERTIES_VIRT(SrcArrayDecl, VirtSrcDecl) {
     : NODE_PROP_VIRT(VirtSrcDecl, N) {}
 
   operator bool() const {
-    return node_ptr_ && node_ptr_->getOp() == IrOpcode::SrcArrayDecl;
+    return NodePtr && NodePtr->getOp() == IrOpcode::SrcArrayDecl;
   }
 
   size_t dim_size() const {
-    assert(node_ptr_->getNumValueInput() > 0);
-    return node_ptr_->getNumValueInput() - 1U;
+    assert(NodePtr->getNumValueInput() > 0);
+    return NodePtr->getNumValueInput() - 1U;
   }
   Node* dim(size_t idx) const {
     assert(idx < dim_size() && "dim index out-of-bound");
-    return node_ptr_->getValueInput(idx + 1);
+    return NodePtr->getValueInput(idx + 1);
   }
-  iterator_range<typename Node::input_iterator>
+  llvm::iterator_range<typename Node::input_iterator>
   dims() const {
-    assert(node_ptr_->getNumValueInput() > 0);
-    return make_range(
-      node_ptr_->value_input_begin() + 1,
-      node_ptr_->value_input_end()
+    assert(NodePtr->getNumValueInput() > 0);
+    return llvm::make_range(
+      NodePtr->value_input_begin() + 1,
+      NodePtr->value_input_end()
     );
   }
 };
@@ -169,15 +164,15 @@ NODE_PROPERTIES(Start) {
     : NODE_PROP_BASE(Start, N) {}
 
   const std::string& name(const Graph& G) const {
-    assert(node_ptr_->getNumValueInput() > 0);
-    auto* NameNode = node_ptr_->getValueInput(0);
+    assert(NodePtr->getNumValueInput() > 0);
+    auto* NameNode = NodePtr->getValueInput(0);
     assert(NameNode && NameNode->getOp() == IrOpcode::ConstantStr);
     return NodeProperties<IrOpcode::ConstantStr>(NameNode)
            .str(G);
   }
 
   Node* EndNode() const {
-    for(auto* CU : node_ptr_->users())
+    for(auto* CU : NodePtr->users())
       if(CU->getOp() == IrOpcode::End) return CU;
     return nullptr;
   }
@@ -185,7 +180,7 @@ NODE_PROPERTIES(Start) {
   Node* FuncStub(Graph& G) const {
     auto* End = EndNode();
     assert(End);
-    return G.func_stub_pool_.find_node(SubGraph(End));
+    return G.FuncStubPool.find_node(SubGraph(End));
   }
 };
 
@@ -193,9 +188,9 @@ NODE_PROPERTIES(Argument) {
   NodeProperties(Node *N)
     : NODE_PROP_BASE(Argument, N) {}
   Node* getFuncStart() const {
-    assert(node_ptr_->effect_users().begin()
-           != node_ptr_->effect_users().end());
-    auto* Start = *node_ptr_->effect_users().begin();
+    assert(NodePtr->effect_users().begin()
+           != NodePtr->effect_users().end());
+    auto* Start = *NodePtr->effect_users().begin();
     assert(Start->getOp() == IrOpcode::Start);
     return Start;
   }
@@ -206,20 +201,20 @@ NODE_PROPERTIES(VirtSrcDesigAccess) {
     : NODE_PROP_BASE(VirtSrcDesigAccess, N) {}
 
   operator bool() const {
-    if(!node_ptr_) return false;
-    auto Op = node_ptr_->getOp();
+    if(!NodePtr) return false;
+    auto Op = NodePtr->getOp();
     return Op == IrOpcode::SrcVarAccess ||
            Op == IrOpcode::SrcArrayAccess;
   }
 
   Node* decl() const {
-    assert(node_ptr_->getNumValueInput() > 0);
-    return node_ptr_->getValueInput(0);
+    assert(NodePtr->getNumValueInput() > 0);
+    return NodePtr->getValueInput(0);
   }
 
   Node* effect_dependency() const {
-    if(node_ptr_->getNumEffectInput() > 0)
-      return node_ptr_->getEffectInput(0);
+    if(NodePtr->getNumEffectInput() > 0)
+      return NodePtr->getEffectInput(0);
     else
       return nullptr;
   }
@@ -232,7 +227,7 @@ struct NodeProperties<IrOpcode::SrcVarAccess>
     : NodeProperties<IrOpcode::VirtSrcDesigAccess>(N) {}
 
   operator bool() const {
-    return node_ptr_ && node_ptr_->op_ == IrOpcode::SrcVarAccess;
+    return NodePtr && NodePtr->Op == IrOpcode::SrcVarAccess;
   }
 };
 
@@ -243,23 +238,23 @@ struct NodeProperties<IrOpcode::SrcArrayAccess>
     : NodeProperties<IrOpcode::VirtSrcDesigAccess>(N) {}
 
   operator bool() const {
-    return node_ptr_ && node_ptr_->op_ == IrOpcode::SrcArrayAccess;
+    return NodePtr && NodePtr->Op == IrOpcode::SrcArrayAccess;
   }
 
   size_t dim_size() const {
-    assert(node_ptr_->getNumValueInput() > 0);
-    return node_ptr_->getNumValueInput() - 1U;
+    assert(NodePtr->getNumValueInput() > 0);
+    return NodePtr->getNumValueInput() - 1U;
   }
   Node* dim(size_t idx) const {
     assert(idx < dim_size() && "dim index out-of-bound");
-    return node_ptr_->getValueInput(idx + 1);
+    return NodePtr->getValueInput(idx + 1);
   }
-  iterator_range<typename Node::input_iterator>
+  llvm::iterator_range<typename Node::input_iterator>
   dims() const {
-    assert(node_ptr_->getNumValueInput() > 0);
-    return make_range(
-      node_ptr_->value_input_begin() + 1,
-      node_ptr_->value_input_end()
+    assert(NodePtr->getNumValueInput() > 0);
+    return llvm::make_range(
+      NodePtr->value_input_begin() + 1,
+      NodePtr->value_input_end()
     );
   }
 };
@@ -269,12 +264,12 @@ NODE_PROPERTIES(SrcAssignStmt) {
     : NODE_PROP_BASE(SrcAssignStmt, N) {}
 
   Node* source() const {
-    assert(node_ptr_->getNumValueInput() > 1);
-    return node_ptr_->getValueInput(1);
+    assert(NodePtr->getNumValueInput() > 1);
+    return NodePtr->getValueInput(1);
   }
   Node* dest() const {
-    assert(node_ptr_->getNumValueInput() > 0);
-    return node_ptr_->getValueInput(0);
+    assert(NodePtr->getNumValueInput() > 0);
+    return NodePtr->getValueInput(0);
   }
 };
 
@@ -283,12 +278,12 @@ NODE_PROPERTIES(If) {
     : NODE_PROP_BASE(If, N) {}
 
   Node* Condition() {
-    assert(node_ptr_->getNumValueInput() > 0);
-    return node_ptr_->getValueInput(0);
+    assert(NodePtr->getNumValueInput() > 0);
+    return NodePtr->getValueInput(0);
   }
 
   Node* TrueBranch() {
-    for(auto* CU : node_ptr_->control_users()) {
+    for(auto* CU : NodePtr->control_users()) {
       if(CU->getOp() == IrOpcode::IfTrue)
         return CU;
     }
@@ -296,11 +291,11 @@ NODE_PROPERTIES(If) {
   }
   Node* FalseBranch() {
     // IfFalse or 'not true branch'
-    for(auto* CU : node_ptr_->control_users()) {
+    for(auto* CU : NodePtr->control_users()) {
       if(CU->getOp() == IrOpcode::IfFalse)
         return CU;
     }
-    for(auto* CU : node_ptr_->control_users()) {
+    for(auto* CU : NodePtr->control_users()) {
       if(CU->getOp() != IrOpcode::IfTrue)
         return CU;
     }
@@ -315,19 +310,19 @@ NODE_PROPERTIES(Merge) {
   // fortunetly our language is simple enough
   // to have only two branches at all time
   Node* TrueBranch() const {
-    assert(node_ptr_->getNumControlInput() > 0);
-    for(unsigned i = 0, CSize = node_ptr_->getNumControlInput();
+    assert(NodePtr->getNumControlInput() > 0);
+    for(unsigned i = 0, CSize = NodePtr->getNumControlInput();
         i < CSize; ++i) {
-      Node* N = node_ptr_->getControlInput(i);
+      Node* N = NodePtr->getControlInput(i);
       if(NodeProperties<IrOpcode::IfTrue>(N)) return N;
     }
     return nullptr;
   }
   // return the If node if there is no IfFalse node and Fallthrough is true
   Node* FalseBranch(bool Fallthrough = false) const {
-    for(unsigned i = 0, CSize = node_ptr_->getNumControlInput();
+    for(unsigned i = 0, CSize = NodePtr->getNumControlInput();
         i < CSize; ++i) {
-      Node* N = node_ptr_->getControlInput(i);
+      Node* N = NodePtr->getControlInput(i);
       if(NodeProperties<IrOpcode::IfFalse>(N)) return N;
       else if(NodeProperties<IrOpcode::If>(N) && Fallthrough) return N;
     }
@@ -340,14 +335,14 @@ NODE_PROPERTIES(VirtIfBranches) {
     : NODE_PROP_BASE(VirtIfBranches, N) {}
 
   operator bool() const {
-    if(!node_ptr_) return false;
-    auto Op = node_ptr_->getOp();
+    if(!NodePtr) return false;
+    auto Op = NodePtr->getOp();
     return Op == IrOpcode::IfTrue ||
            Op == IrOpcode::IfFalse;
   }
 
   Node* BranchPoint() const {
-    for(auto* N : node_ptr_->control_inputs()) {
+    for(auto* N : NodePtr->control_inputs()) {
       if(NodeProperties<IrOpcode::If>(N))
         return N;
     }
@@ -360,15 +355,15 @@ NODE_PROPERTIES(Loop) {
     : NODE_PROP_BASE(Loop, N) {}
 
   Node* Branch() {
-    for(auto* CU : node_ptr_->control_users()) {
+    for(auto* CU : NodePtr->control_users()) {
       if(CU->getOp() == IrOpcode::If) return CU;
     }
     return nullptr;
   }
 
   Node* Backedge() {
-    assert(node_ptr_->getNumControlInput() == 2);
-    return node_ptr_->getControlInput(1);
+    assert(NodePtr->getNumControlInput() == 2);
+    return NodePtr->getControlInput(1);
   }
 };
 
@@ -377,8 +372,8 @@ NODE_PROPERTIES(Phi) {
     : NODE_PROP_BASE(Phi, N) {}
 
   Node* CtrlPivot() const {
-    assert(node_ptr_->getNumControlInput() > 0);
-    return node_ptr_->getControlInput(0);
+    assert(NodePtr->getNumControlInput() > 0);
+    return NodePtr->getControlInput(0);
   }
 
   using ctrl_input_iterator = typename Node::input_iterator;
@@ -394,17 +389,17 @@ NODE_PROPERTIES(Phi) {
     size_t Idx = 0U;
     switch(InputKind) {
     case Use::K_VALUE: {
-      auto Size = node_ptr_->getNumValueInput();
+      auto Size = NodePtr->getNumValueInput();
       for(; Idx < Size; ++Idx) {
-        if(N == node_ptr_->getValueInput(Idx)) break;
+        if(N == NodePtr->getValueInput(Idx)) break;
       }
       if(Idx >= Size) return nullptr;
       break;
     }
     case Use::K_EFFECT: {
-      auto Size = node_ptr_->getNumEffectInput();
+      auto Size = NodePtr->getNumEffectInput();
       for(; Idx < Size; ++Idx) {
-        if(N == node_ptr_->getEffectInput(Idx)) break;
+        if(N == NodePtr->getEffectInput(Idx)) break;
       }
       if(Idx >= Size) return nullptr;
       break;
@@ -422,8 +417,8 @@ NODE_PROPERTIES(Alloca) {
     : NODE_PROP_BASE(Alloca, N) {}
 
   Node* Size() const {
-    assert(node_ptr_->getNumValueInput() > 0);
-    return node_ptr_->getValueInput(0);
+    assert(NodePtr->getNumValueInput() > 0);
+    return NodePtr->getValueInput(0);
   }
 };
 
@@ -432,8 +427,8 @@ NODE_PROPERTIES(VirtGlobalValues) {
     : NODE_PROP_BASE(VirtGlobalValues, N) {}
 
   operator bool() const {
-    if(!node_ptr_) return false;
-    switch(node_ptr_->getOp()) {
+    if(!NodePtr) return false;
+    switch(NodePtr->getOp()) {
     case IrOpcode::ConstantStr:
     case IrOpcode::ConstantInt:
     case IrOpcode::Start:
@@ -452,8 +447,8 @@ NODE_PROPERTIES(VirtConstantValues) {
     : NODE_PROP_BASE(VirtConstantValues, N) {}
 
   operator bool() const {
-    if(!node_ptr_) return false;
-    switch(node_ptr_->getOp()) {
+    if(!NodePtr) return false;
+    switch(NodePtr->getOp()) {
     case IrOpcode::ConstantStr:
     case IrOpcode::ConstantInt:
     case IrOpcode::Dead:
@@ -469,8 +464,8 @@ NODE_PROPERTIES(VirtCtrlPoints) {
     : NODE_PROP_BASE(VirtCtrlPoints, N) {}
 
   operator bool() const {
-    if(!node_ptr_) return false;
-    switch(node_ptr_->getOp()) {
+    if(!NodePtr) return false;
+    switch(NodePtr->getOp()) {
     case IrOpcode::If:
     case IrOpcode::IfTrue:
     case IrOpcode::IfFalse:
@@ -491,21 +486,21 @@ NODE_PROPERTIES(VirtMemOps) {
     : NODE_PROP_BASE(VirtMemOps, N) {}
 
   operator bool() const {
-    if(!node_ptr_) return false;
-    auto OC = node_ptr_->getOp();
+    if(!NodePtr) return false;
+    auto OC = NodePtr->getOp();
     return OC == IrOpcode::MemLoad ||
            OC == IrOpcode::MemStore;
   }
 
   Node* BaseAddr() {
-    if(node_ptr_->getNumValueInput() > 0) {
-      return node_ptr_->getValueInput(0);
+    if(NodePtr->getNumValueInput() > 0) {
+      return NodePtr->getValueInput(0);
     }
     return nullptr;
   }
   Node* Offset() {
-    if(node_ptr_->getNumValueInput() > 1) {
-      return node_ptr_->getValueInput(1);
+    if(NodePtr->getNumValueInput() > 1) {
+      return NodePtr->getValueInput(1);
     }
     return nullptr;
   }
@@ -516,7 +511,7 @@ NODE_PROPERTIES_VIRT(MemLoad, VirtMemOps) {
     : NODE_PROP_VIRT(VirtMemOps, N) {}
 
   operator bool() const {
-    return node_ptr_ && node_ptr_->getOp() == IrOpcode::MemLoad;
+    return NodePtr && NodePtr->getOp() == IrOpcode::MemLoad;
   }
 };
 NODE_PROPERTIES_VIRT(MemStore, VirtMemOps) {
@@ -524,12 +519,12 @@ NODE_PROPERTIES_VIRT(MemStore, VirtMemOps) {
     : NODE_PROP_VIRT(VirtMemOps, N) {}
 
   operator bool() const {
-    return node_ptr_ && node_ptr_->getOp() == IrOpcode::MemStore;
+    return NodePtr && NodePtr->getOp() == IrOpcode::MemStore;
   }
 
   Node* SrcVal() {
-    if(node_ptr_->getNumValueInput() > 2) {
-      return node_ptr_->getValueInput(2);
+    if(NodePtr->getNumValueInput() > 2) {
+      return NodePtr->getValueInput(2);
     }
     return nullptr;
   }
@@ -540,8 +535,8 @@ NODE_PROPERTIES(VirtBinOps) {
     : NODE_PROP_BASE(VirtBinOps, N) {}
 
   operator bool() const {
-    if(!node_ptr_) return false;
-    switch(node_ptr_->getOp()) {
+    if(!NodePtr) return false;
+    switch(NodePtr->getOp()) {
     case IrOpcode::BinAdd:
     case IrOpcode::BinSub:
     case IrOpcode::BinMul:
@@ -559,8 +554,8 @@ NODE_PROPERTIES(VirtBinOps) {
   }
 
   bool IsCommutative() const {
-    if(!node_ptr_) return false;
-    switch(node_ptr_->getOp()) {
+    if(!NodePtr) return false;
+    switch(NodePtr->getOp()) {
     case IrOpcode::BinAdd:
     case IrOpcode::BinMul:
     case IrOpcode::BinEq:
@@ -572,15 +567,15 @@ NODE_PROPERTIES(VirtBinOps) {
   }
 
   Node* LHS() const {
-    if(node_ptr_->getNumValueInput() > 0)
-      return node_ptr_->getValueInput(0);
+    if(NodePtr->getNumValueInput() > 0)
+      return NodePtr->getValueInput(0);
     else
       return nullptr;
   }
 
   Node* RHS() const {
-    if(node_ptr_->getNumValueInput() > 1)
-      return node_ptr_->getValueInput(1);
+    if(NodePtr->getNumValueInput() > 1)
+      return NodePtr->getValueInput(1);
     else
       return nullptr;
   }
@@ -591,8 +586,8 @@ NODE_PROPERTIES(Return) {
     : NODE_PROP_BASE(Return, N) {}
 
   Node* ReturnVal() const {
-    if(node_ptr_->getNumValueInput() > 0)
-      return node_ptr_->getValueInput(0);
+    if(NodePtr->getNumValueInput() > 0)
+      return NodePtr->getValueInput(0);
     else
       return nullptr;
   }
@@ -603,8 +598,8 @@ NODE_PROPERTIES(VirtTerminate) {
     : NODE_PROP_BASE(VirtTerminate, N) {}
 
   operator bool() const {
-    if(!node_ptr_) return false;
-    switch(node_ptr_->getOp()) {
+    if(!NodePtr) return false;
+    switch(NodePtr->getOp()) {
     case IrOpcode::If:
     case IrOpcode::Return:
       return true;
@@ -614,99 +609,101 @@ NODE_PROPERTIES(VirtTerminate) {
   }
 };
 
-// clang-format on
-
 /// ======= Builders =======
-template <>
+template<>
 struct NodeBuilder<IrOpcode::Dead> {
   NodeBuilder(Graph* graph) : G(graph) {}
 
   Node* Build() {
-    if (!G->dead_node_) {
-      G->dead_node_ = new Node(IrOpcode::Dead, {});
-      G->InsertNode(G->dead_node_);
+    if(!G->DeadNode) {
+      G->DeadNode = new Node(IrOpcode::Dead, {});
+      G->InsertNode(G->DeadNode);
     }
-    return G->dead_node_;
+    return G->DeadNode;
   }
 
- private:
+private:
   Graph* G;
 };
 
-template <>
+template<>
 struct NodeBuilder<IrOpcode::ConstantInt> {
-  NodeBuilder(Graph* graph, int32_t val) : G(graph), Val(val) {}
+  NodeBuilder(Graph* graph, int32_t val)
+    : G(graph), Val(val) {}
 
   Node* Build() {
-    if (auto* N = G->const_number_pool_.find_node(Val))
+    if(auto* N = G->ConstNumberPool.find_node(Val))
       return N;
     else {
       // New constant Node
       Node* NewN = new Node(IrOpcode::ConstantInt);
-      G->const_number_pool_.insert({NewN, Val});
+      G->ConstNumberPool.insert({NewN, Val});
       G->InsertNode(NewN);
       return NewN;
     }
   }
 
- public:
+public:
   Graph* G;
   int32_t Val;
 };
 
-template <>
+template<>
 struct NodeBuilder<IrOpcode::ConstantStr> {
   NodeBuilder(Graph* graph, const std::string& Name)
-      : G(graph), SymName(Name) {}
+    : G(graph),
+      SymName(Name) {}
 
-  Node* Build() {
-    if (auto* N = G->const_str_pool_.find_node(SymName))
+  Node* Build(){
+    if(auto* N = G->ConstStrPool.find_node(SymName))
       return N;
     else {
       // New constant Node
       Node* NewN = new Node(IrOpcode::ConstantStr);
-      G->const_str_pool_.insert({NewN, SymName});
+      G->ConstStrPool.insert({NewN, SymName});
       G->InsertNode(NewN);
       return NewN;
     }
   }
 
- private:
-  Graph* G;
+private:
+  Graph *G;
   const std::string& SymName;
 };
 
-template <>
+template<>
 struct NodeBuilder<IrOpcode::FunctionStub> {
   NodeBuilder(Graph* graph, const SubGraph& subgraph)
-      : G(graph), SG(subgraph) {}
+    : G(graph), SG(subgraph) {}
 
-  // NodeBuilder& AddAttribute(Node* N) {
-  //  TODO
-  // return *this;
+  //NodeBuilder& AddAttribute(Node* N) {
+    // TODO
+    //return *this;
   //}
 
   Node* Build() {
-    if (auto* N = G->func_stub_pool_.find_node(SG))
+    if(auto* N = G->FuncStubPool.find_node(SG))
       return N;
     else {
       // New function stub node
       // TODO: attribute and node update
       Node* NewN = new Node(IrOpcode::FunctionStub);
-      G->func_stub_pool_.insert({NewN, SG});
+      G->FuncStubPool.insert({NewN, SG});
       G->InsertNode(NewN);
       return NewN;
     }
   }
 
- private:
+private:
   Graph* G;
   SubGraph SG;
 };
 
-template <>
+template<>
 struct NodeBuilder<IrOpcode::Call> {
-  NodeBuilder(Graph* graph, Node* Stub) : G(graph), FuncStub(Stub) {}
+  NodeBuilder(Graph* graph, Node* Stub)
+    : G(graph),
+      FuncStub(Stub) {}
 
   NodeBuilder& AddParam(Node* N) {
     Params.push_back(N);
@@ -718,21 +715,22 @@ struct NodeBuilder<IrOpcode::Call> {
   Node* Build() {
     Params.insert(Params.begin(), FuncStub);
     auto* N = new Node(IrOpcode::Call, Params);
-    for (auto* P : Params)
-      P->users_.push_back(N);
+    for(auto* P : Params)
+      P->Users.push_back(N);
     G->InsertNode(N);
     return N;
   }
 
- private:
+private:
   Graph* G;
   Node* FuncStub;
   std::vector<Node*> Params;
 };
 
-template <>
+template<>
 struct NodeBuilder<IrOpcode::SrcVarDecl> {
-  NodeBuilder(Graph* graph) : G(graph) {}
+  NodeBuilder(Graph *graph)
+    : G(graph) {}
 
   NodeBuilder& SetSymbolName(const std::string& Name) {
     SymName = Name;
@@ -743,19 +741,20 @@ struct NodeBuilder<IrOpcode::SrcVarDecl> {
     Node* SymNameNode = NodeBuilder<IrOpcode::ConstantStr>(G, SymName).Build();
     // Value dependency
     Node* VarDeclNode = new Node(IrOpcode::SrcVarDecl, {SymNameNode});
-    SymNameNode->users_.push_back(VarDeclNode);
+    SymNameNode->Users.push_back(VarDeclNode);
     G->InsertNode(VarDeclNode);
     return VarDeclNode;
   }
 
- private:
-  Graph* G;
+private:
+  Graph *G;
   std::string SymName;
 };
 
-template <>
+template<>
 struct NodeBuilder<IrOpcode::SrcArrayDecl> {
-  NodeBuilder(Graph* graph) : G(graph) {}
+  NodeBuilder(Graph *graph)
+    : G(graph) {}
 
   NodeBuilder& SetSymbolName(const std::string& Name) {
     SymName = Name;
@@ -785,37 +784,41 @@ struct NodeBuilder<IrOpcode::SrcArrayDecl> {
     std::vector<Node*> ValDeps{SymNode};
     ValDeps.insert(ValDeps.end(), Dims.begin(), Dims.end());
     Node* ArrDeclNode = new Node(IrOpcode::SrcArrayDecl, ValDeps);
-    for (auto* N : ValDeps)
-      N->users_.push_back(ArrDeclNode);
+    for(auto* N : ValDeps)
+      N->Users.push_back(ArrDeclNode);
     G->InsertNode(ArrDeclNode);
     return ArrDeclNode;
   }
 
- private:
-  Graph* G;
+private:
+  Graph *G;
   std::string SymName;
   std::vector<Node*> Dims;
 };
 
-template <>
+template<>
 struct NodeBuilder<IrOpcode::SrcInitialArray> {
-  NodeBuilder(Graph* graph, Node* Decl) : G(graph), ArrayDecl(Decl) {}
+  NodeBuilder(Graph *graph, Node* Decl)
+    : G(graph),
+      ArrayDecl(Decl) {}
 
   Node* Build() {
-    auto* N = new Node(IrOpcode::SrcInitialArray, {ArrayDecl});
-    ArrayDecl->users_.push_back(N);
+    auto* N = new Node(IrOpcode::SrcInitialArray,
+                       {ArrayDecl});
+    ArrayDecl->Users.push_back(N);
     G->InsertNode(N);
     return N;
   }
 
- private:
-  Graph* G;
+private:
+  Graph *G;
   Node* ArrayDecl;
 };
 
-namespace detail {
+namespace _details {
 // (Simple)Binary Ops
-template <IrOpcode::ID OC, class SubT = NodeBuilder<OC>>
+template<IrOpcode::ID OC,
+         class SubT = NodeBuilder<OC>>
 struct BinOpNodeBuilder {
   BinOpNodeBuilder(Graph* graph) : G(graph) {}
 
@@ -830,26 +833,26 @@ struct BinOpNodeBuilder {
 
   Node* Build() {
     auto* BinOp = new Node(OC, {LHSNode, RHSNode});
-    LHSNode->users_.push_back(BinOp);
-    RHSNode->users_.push_back(BinOp);
+    LHSNode->Users.push_back(BinOp);
+    RHSNode->Users.push_back(BinOp);
     G->InsertNode(BinOp);
     return BinOp;
   }
 
- protected:
-  Graph* G;
+protected:
+  Graph *G;
   Node *LHSNode, *RHSNode;
 
   SubT& downstream() { return *static_cast<SubT*>(this); }
 };
-}  // namespace detail
+} // end namespace _details
 
-#define TRIVIAL_BIN_OP_BUILDER(OC)                         \
-  template <>                                              \
-  struct NodeBuilder<IrOpcode::OC>                         \
-      : public detail::BinOpNodeBuilder<IrOpcode::OC> {    \
-    NodeBuilder(Graph* graph) : BinOpNodeBuilder(graph) {} \
-  }
+#define TRIVIAL_BIN_OP_BUILDER(OC)  \
+template<>  \
+struct NodeBuilder<IrOpcode::OC> :  \
+  public _details::BinOpNodeBuilder<IrOpcode::OC> { \
+  NodeBuilder(Graph* graph) : BinOpNodeBuilder(graph) {}  \
+}
 
 TRIVIAL_BIN_OP_BUILDER(BinAdd);
 TRIVIAL_BIN_OP_BUILDER(BinSub);
@@ -863,9 +866,11 @@ TRIVIAL_BIN_OP_BUILDER(BinEq);
 TRIVIAL_BIN_OP_BUILDER(BinNe);
 #undef TRIVIAL_BIN_OP_BUILDER
 
-template <>
+template<>
 struct NodeBuilder<IrOpcode::SrcVarAccess> {
-  NodeBuilder(Graph* graph) : G(graph), VarDecl(nullptr), EffectDep(nullptr) {}
+  NodeBuilder(Graph* graph) :
+    G(graph),
+    VarDecl(nullptr), EffectDep(nullptr) {}
 
   NodeBuilder& Decl(Node* N) {
     VarDecl = N;
@@ -878,32 +883,34 @@ struct NodeBuilder<IrOpcode::SrcVarAccess> {
   }
 
   Node* Build(bool Verify = true) {
-    if (Verify) {
+    if(Verify) {
       assert((NodeProperties<IrOpcode::SrcVarDecl>(VarDecl) ||
-              NodeProperties<IrOpcode::Argument>(VarDecl)) &&
-             "original decl should be SrcVarDecl");
+              NodeProperties<IrOpcode::Argument>(VarDecl))
+             && "original decl should be SrcVarDecl");
     }
 
     std::vector<Node*> Effects;
-    if (EffectDep)
-      Effects.push_back(EffectDep);
-    auto* N = new Node(IrOpcode::SrcVarAccess, {VarDecl},  // value inputs
-                       {} /*control inputs*/, Effects /*effect inputs*/);
-    VarDecl->users_.push_back(N);
-    if (EffectDep)
-      EffectDep->users_.push_back(N);
+    if(EffectDep) Effects.push_back(EffectDep);
+    auto* N = new Node(IrOpcode::SrcVarAccess,
+                       {VarDecl},// value inputs
+                       {}/*control inputs*/,
+                       Effects/*effect inputs*/);
+    VarDecl->Users.push_back(N);
+    if(EffectDep) EffectDep->Users.push_back(N);
     G->InsertNode(N);
     return N;
   }
 
- private:
+private:
   Graph* G;
   Node *VarDecl, *EffectDep;
 };
 
-template <>
+template<>
 struct NodeBuilder<IrOpcode::SrcArrayAccess> {
-  NodeBuilder(Graph* graph) : G(graph), VarDecl(nullptr), EffectDep(nullptr) {}
+  NodeBuilder(Graph *graph) :
+    G(graph),
+    VarDecl(nullptr), EffectDep(nullptr) {}
 
   NodeBuilder& Decl(Node* D) {
     VarDecl = D;
@@ -923,12 +930,13 @@ struct NodeBuilder<IrOpcode::SrcArrayAccess> {
     return *this;
   }
 
-  Node* Build(bool Verify = true) {
-    if (Verify) {
+  Node* Build(bool Verify=true) {
+    if(Verify) {
       // Make sure the amount of dims
       // matches that of original array decl
       NodeProperties<IrOpcode::SrcArrayDecl> NP(VarDecl);
-      assert(NP && NP.dim_size() == Dims.size() && "illegal array decl");
+      assert(NP && NP.dim_size() == Dims.size() &&
+             "illegal array decl");
     }
 
     // value dependency
@@ -937,29 +945,27 @@ struct NodeBuilder<IrOpcode::SrcArrayAccess> {
     std::vector<Node*> ValDeps{VarDecl};
     ValDeps.insert(ValDeps.end(), Dims.begin(), Dims.end());
     std::vector<Node*> EffectDeps;
-    if (EffectDep)
-      EffectDeps.push_back(EffectDep);
+    if(EffectDep) EffectDeps.push_back(EffectDep);
     Node* ArrAccessNode = new Node(IrOpcode::SrcArrayAccess,
-                                   ValDeps,      // value dependencies
-                                   {},           // control dependencies
-                                   EffectDeps);  // effect dependencies
-    for (auto* N : ValDeps)
-      N->users_.push_back(ArrAccessNode);
-    if (EffectDep)
-      EffectDep->users_.push_back(ArrAccessNode);
+                                   ValDeps, // value dependencies
+                                   {}, // control dependencies
+                                   EffectDeps); // effect dependencies
+    for(auto* N : ValDeps)
+      N->Users.push_back(ArrAccessNode);
+    if(EffectDep) EffectDep->Users.push_back(ArrAccessNode);
     G->InsertNode(ArrAccessNode);
     return ArrAccessNode;
   }
 
- private:
-  Graph* G;
+private:
+  Graph *G;
   Node *VarDecl, *EffectDep;
   std::vector<Node*> Dims;
 };
 
-template <>
+template<>
 struct NodeBuilder<IrOpcode::SrcAssignStmt> {
-  NodeBuilder(Graph* graph) : G(graph) {}
+  NodeBuilder(Graph *graph) : G(graph) {}
 
   NodeBuilder& Dest(Node* N) {
     DestNode = N;
@@ -971,22 +977,24 @@ struct NodeBuilder<IrOpcode::SrcAssignStmt> {
   }
 
   Node* Build() {
-    auto* N = new Node(IrOpcode::SrcAssignStmt, {DestNode, SrcNode});
-    DestNode->users_.push_back(N);
-    SrcNode->users_.push_back(N);
+    auto* N = new Node(IrOpcode::SrcAssignStmt,
+                       {DestNode, SrcNode});
+    DestNode->Users.push_back(N);
+    SrcNode->Users.push_back(N);
     G->InsertNode(N);
     return N;
   }
 
- private:
-  Graph* G;
+private:
+  Graph *G;
   Node *DestNode, *SrcNode;
 };
 
-template <>
+template<>
 struct NodeBuilder<IrOpcode::VirtIfBranches> {
   NodeBuilder(Graph* graph, bool IsTrueBr)
-      : G(graph), IfNode(nullptr), BranchKind(IsTrueBr) {}
+    : G(graph),
+      IfNode(nullptr), BranchKind(IsTrueBr) {}
 
   NodeBuilder& IfStmt(Node* N) {
     IfNode = N;
@@ -995,22 +1003,24 @@ struct NodeBuilder<IrOpcode::VirtIfBranches> {
 
   Node* Build() {
     assert(IfNode && "If node cannot be null");
-    auto* N = new Node(BranchKind ? IrOpcode::IfTrue : IrOpcode::IfFalse, {},
-                       {IfNode});
-    IfNode->users_.push_back(N);
+    auto* N = new Node(BranchKind? IrOpcode::IfTrue : IrOpcode::IfFalse,
+                       {}, {IfNode});
+    IfNode->Users.push_back(N);
     G->InsertNode(N);
     return N;
   }
 
- private:
+private:
   Graph* G;
-  Node* IfNode;
+  Node *IfNode;
   bool BranchKind;
 };
 
-template <>
+template<>
 struct NodeBuilder<IrOpcode::If> {
-  NodeBuilder(Graph* graph) : G(graph), Predicate(nullptr) {}
+  NodeBuilder(Graph* graph)
+    : G(graph),
+      Predicate(nullptr) {}
 
   NodeBuilder& Condition(Node* N) {
     Predicate = N;
@@ -1019,18 +1029,18 @@ struct NodeBuilder<IrOpcode::If> {
 
   Node* Build() {
     assert(Predicate && "condition can not be null");
-    auto* N = new Node(IrOpcode::If, {Predicate});
-    Predicate->users_.push_back(N);
+    auto* N = new Node(IrOpcode::If,
+                       {Predicate});
+    Predicate->Users.push_back(N);
     G->InsertNode(N);
     return N;
   }
-
- private:
+private:
   Graph* G;
-  Node* Predicate;
+  Node *Predicate;
 };
 
-template <>
+template<>
 struct NodeBuilder<IrOpcode::Merge> {
   NodeBuilder(Graph* graph) : G(graph) {}
 
@@ -1040,19 +1050,20 @@ struct NodeBuilder<IrOpcode::Merge> {
   }
 
   Node* Build() {
-    auto* N = new Node(IrOpcode::Merge, {}, Ctrls);
-    for (auto* Ctrl : Ctrls)
-      Ctrl->users_.push_back(N);
+    auto* N = new Node(IrOpcode::Merge,
+                       {}, Ctrls);
+    for(auto* Ctrl : Ctrls)
+      Ctrl->Users.push_back(N);
     G->InsertNode(N);
     return N;
   }
 
- private:
+private:
   Graph* G;
   std::vector<Node*> Ctrls;
 };
 
-template <>
+template<>
 struct NodeBuilder<IrOpcode::EffectMerge> {
   NodeBuilder(Graph* graph) : G(graph) {}
 
@@ -1062,19 +1073,20 @@ struct NodeBuilder<IrOpcode::EffectMerge> {
   }
 
   Node* Build() {
-    auto* N = new Node(IrOpcode::EffectMerge, {}, {}, Effects);
-    for (auto* Effect : Effects)
-      Effect->users_.push_back(N);
+    auto* N = new Node(IrOpcode::EffectMerge,
+                       {}, {}, Effects);
+    for(auto* Effect : Effects)
+      Effect->Users.push_back(N);
     G->InsertNode(N);
     return N;
   }
 
- private:
+private:
   std::vector<Node*> Effects;
   Graph* G;
 };
 
-template <>
+template<>
 struct NodeBuilder<IrOpcode::Phi> {
   NodeBuilder(Graph* graph) : G(graph) {}
 
@@ -1095,47 +1107,51 @@ struct NodeBuilder<IrOpcode::Phi> {
 
   Node* Build() {
     assert(MergeNode && "PHI require control merge point");
-    auto* N = new Node(IrOpcode::Phi, ValueDeps, {MergeNode}, EffectDeps);
-    MergeNode->users_.push_back(N);
-    for (auto* VD : ValueDeps)
-      VD->users_.push_back(N);
-    for (auto* ED : EffectDeps)
-      ED->users_.push_back(N);
+    auto* N = new Node(IrOpcode::Phi,
+                       ValueDeps, {MergeNode},
+                       EffectDeps);
+    MergeNode->Users.push_back(N);
+    for(auto* VD : ValueDeps)
+      VD->Users.push_back(N);
+    for(auto* ED : EffectDeps)
+      ED->Users.push_back(N);
     G->InsertNode(N);
     return N;
   }
 
- private:
+private:
   Graph* G;
   std::vector<Node*> ValueDeps, EffectDeps;
   Node* MergeNode;
 };
 
-template <>
+template<>
 struct NodeBuilder<IrOpcode::Argument> {
   NodeBuilder(Graph* graph, const std::string& Name)
-      : G(graph), SrcArgName(Name) {}
+    : G(graph),
+      SrcArgName(Name) {}
 
   Node* Build() {
-    auto* NameStrNode =
-        NodeBuilder<IrOpcode::ConstantStr>(G, SrcArgName).Build();
+    auto* NameStrNode = NodeBuilder<IrOpcode::ConstantStr>(G, SrcArgName)
+                        .Build();
     auto* N = new Node(IrOpcode::Argument, {NameStrNode});
-    NameStrNode->users_.push_back(N);
+    NameStrNode->Users.push_back(N);
     G->InsertNode(N);
     return N;
   }
 
- private:
+private:
   Graph* G;
   const std::string& SrcArgName;
 };
 
-template <>
+template<>
 struct NodeBuilder<IrOpcode::VirtFuncPrototype> {
   NodeBuilder(Graph* graph) : G(graph) {}
 
   NodeBuilder& FuncName(const std::string& NameStr) {
-    NameStrNode = NodeBuilder<IrOpcode::ConstantStr>(G, NameStr).Build();
+    NameStrNode = NodeBuilder<IrOpcode::ConstantStr>(G, NameStr)
+                  .Build();
     return *this;
   }
 
@@ -1145,36 +1161,39 @@ struct NodeBuilder<IrOpcode::VirtFuncPrototype> {
   }
 
   Node* Build(bool Verify = true) {
-    if (Verify) {
-      if (!NameStrNode) {
-        log::Error() << "Require a name for the function\n";
+    if(Verify) {
+      if(!NameStrNode) {
+        Log::E() << "Require a name for the function\n";
         return nullptr;
       }
-      for (auto* PN : Parameters)
-        if (!NodeProperties<IrOpcode::Argument>(PN)) {
-          log::Error() << "Expecting Argument kind Node\n";
+      for(auto* PN : Parameters)
+        if(!NodeProperties<IrOpcode::Argument>(PN)) {
+          Log::E() << "Expecting Argument kind Node\n";
           return nullptr;
         }
     }
 
     // Start node has effect dependency on arguments
-    auto* StartNode = new Node(IrOpcode::Start, {NameStrNode}, {}, Parameters);
-    NameStrNode->users_.push_back(StartNode);
-    for (auto* PN : Parameters)
-      PN->users_.push_back(StartNode);
+    auto* StartNode = new Node(IrOpcode::Start,
+                               {NameStrNode},
+                               {}, Parameters);
+    NameStrNode->Users.push_back(StartNode);
+    for(auto* PN : Parameters)
+      PN->Users.push_back(StartNode);
     G->InsertNode(StartNode);
     return StartNode;
   }
 
- private:
+private:
   Graph* G;
-  Node* NameStrNode;
+  Node *NameStrNode;
   std::vector<Node*> Parameters;
 };
 
-template <>
+template<>
 struct NodeBuilder<IrOpcode::End> {
-  NodeBuilder(Graph* graph, Node* Start) : G(graph), StartNode(Start) {}
+  NodeBuilder(Graph* graph, Node* Start)
+    : G(graph), StartNode(Start) {}
 
   NodeBuilder& AddTerminator(Node* N) {
     TermNodes.push_back(N);
@@ -1189,34 +1208,36 @@ struct NodeBuilder<IrOpcode::End> {
     // control dependent on terminator nodes,
     // or start node if the former one is absent
     std::vector<Node*> CtrlDeps;
-    if (!TermNodes.empty())
+    if(!TermNodes.empty())
       CtrlDeps = std::move(TermNodes);
     CtrlDeps.insert(CtrlDeps.begin(), StartNode);
-    auto* N = new Node(IrOpcode::End, {}, CtrlDeps, EffectDeps);
-    for (auto* TN : CtrlDeps)
-      TN->users_.push_back(N);
-    for (auto* E : EffectDeps)
-      E->users_.push_back(N);
+    auto* N = new Node(IrOpcode::End,
+                       {}, CtrlDeps, EffectDeps);
+    for(auto* TN : CtrlDeps)
+      TN->Users.push_back(N);
+    for(auto* E : EffectDeps)
+      E->Users.push_back(N);
     G->InsertNode(N);
     return N;
   }
 
- private:
+private:
   Graph* G;
   Node* StartNode;
   std::vector<Node*> TermNodes, EffectDeps;
 };
 
-template <>
+template<>
 struct NodeBuilder<IrOpcode::Return> {
-  explicit NodeBuilder(Graph* graph, Node* RetExpr = nullptr)
-      : G(graph), ReturnExpr(RetExpr) {}
+  explicit
+  NodeBuilder(Graph* graph, Node* RetExpr = nullptr)
+    : G(graph), ReturnExpr(RetExpr) {}
 
   Node* Build() {
     Node* N = nullptr;
-    if (ReturnExpr) {
+    if(ReturnExpr) {
       N = new Node(IrOpcode::Return, {ReturnExpr});
-      ReturnExpr->users_.push_back(N);
+      ReturnExpr->Users.push_back(N);
     } else {
       N = new Node(IrOpcode::Return, {});
     }
@@ -1224,15 +1245,16 @@ struct NodeBuilder<IrOpcode::Return> {
     return N;
   }
 
- private:
+private:
   Graph* G;
   Node* ReturnExpr;
 };
 
-template <>
+template<>
 struct NodeBuilder<IrOpcode::Loop> {
   NodeBuilder(Graph* graph, Node* CtrlPoint)
-      : G(graph), LastCtrlPoint(CtrlPoint) {}
+    : G(graph),
+      LastCtrlPoint(CtrlPoint) {}
 
   NodeBuilder& Condition(Node* C) {
     Predicate = C;
@@ -1240,30 +1262,35 @@ struct NodeBuilder<IrOpcode::Loop> {
   }
 
   Node* Build() {
-    auto* IfNode = NodeBuilder<IrOpcode::If>(G).Condition(Predicate).Build();
-    auto* IfTrue =
-        NodeBuilder<IrOpcode::VirtIfBranches>(G, true).IfStmt(IfNode).Build();
-    auto* IfFalse =
-        NodeBuilder<IrOpcode::VirtIfBranches>(G, false).IfStmt(IfNode).Build();
+    auto* IfNode = NodeBuilder<IrOpcode::If>(G)
+                   .Condition(Predicate)
+                   .Build();
+    auto* IfTrue = NodeBuilder<IrOpcode::VirtIfBranches>(G, true)
+                   .IfStmt(IfNode)
+                   .Build();
+    auto* IfFalse = NodeBuilder<IrOpcode::VirtIfBranches>(G, false)
+                    .IfStmt(IfNode)
+                    .Build();
     auto* LoopNode = new Node(IrOpcode::Loop, {},
                               // backedge is always behind LastCtrlPoint!
                               {LastCtrlPoint, IfTrue});
     IfNode->appendControlInput(LoopNode);
-    LastCtrlPoint->users_.push_back(LoopNode);
-    IfTrue->users_.push_back(LoopNode);
+    LastCtrlPoint->Users.push_back(LoopNode);
+    IfTrue->Users.push_back(LoopNode);
     G->InsertNode(LoopNode);
     return LoopNode;
   }
 
- private:
+private:
   Graph* G;
   Node* LastCtrlPoint;
   Node* Predicate;
 };
 
-template <>
+template<>
 struct NodeBuilder<IrOpcode::Alloca> {
-  NodeBuilder(Graph* graph) : G(graph), AllocationSize(nullptr) {}
+  NodeBuilder(Graph* graph)
+    : G(graph), AllocationSize(nullptr) {}
 
   NodeBuilder& Size(Node* N) {
     AllocationSize = N;
@@ -1271,40 +1298,43 @@ struct NodeBuilder<IrOpcode::Alloca> {
   }
 
   Node* Build() {
-    if (!AllocationSize)
+    if(!AllocationSize)
       // default to be one
-      AllocationSize = NodeBuilder<IrOpcode::ConstantInt>(G, 1).Build();
+      AllocationSize = NodeBuilder<IrOpcode::ConstantInt>(G, 1)
+                       .Build();
 
-    auto* N = new Node(IrOpcode::Alloca, {AllocationSize});
-    AllocationSize->users_.push_back(N);
+    auto* N = new Node(IrOpcode::Alloca,
+                       {AllocationSize});
+    AllocationSize->Users.push_back(N);
     G->InsertNode(N);
     return N;
   }
 
- private:
+private:
   Graph* G;
   Node* AllocationSize;
 };
 
-template <>
+template<>
 struct NodeBuilder<IrOpcode::MemLoad>
-    : public internal::MemNodeBuilder<IrOpcode::MemLoad> {
+  : public _internal::MemNodeBuilder<IrOpcode::MemLoad> {
   NodeBuilder(Graph* graph)
-      : internal::MemNodeBuilder<IrOpcode::MemLoad>(graph) {}
+    : _internal::MemNodeBuilder<IrOpcode::MemLoad>(graph) {}
 
   Node* Build() {
-    auto* N = new Node(IrOpcode::MemLoad, {base_addr_node_, offset_node_});
-    base_addr_node_->users_.push_back(N);
-    offset_node_->users_.push_back(N);
-    graph_->InsertNode(N);
+    auto* N = new Node(IrOpcode::MemLoad,
+                       {BaseAddrNode, OffsetNode});
+    BaseAddrNode->Users.push_back(N);
+    OffsetNode->Users.push_back(N);
+    G->InsertNode(N);
     return N;
   }
 };
-template <>
+template<>
 struct NodeBuilder<IrOpcode::MemStore>
-    : public internal::MemNodeBuilder<IrOpcode::MemStore> {
+  : public _internal::MemNodeBuilder<IrOpcode::MemStore> {
   NodeBuilder(Graph* graph)
-      : internal::MemNodeBuilder<IrOpcode::MemStore>(graph) {}
+    : _internal::MemNodeBuilder<IrOpcode::MemStore>(graph) {}
 
   NodeBuilder& Src(Node* N) {
     SrcNode = N;
@@ -1312,20 +1342,20 @@ struct NodeBuilder<IrOpcode::MemStore>
   }
 
   Node* Build() {
-    auto* N =
-        new Node(IrOpcode::MemStore, {base_addr_node_, offset_node_, SrcNode});
-    base_addr_node_->users_.push_back(N);
-    offset_node_->users_.push_back(N);
-    SrcNode->users_.push_back(N);
-    graph_->InsertNode(N);
+    auto* N = new Node(IrOpcode::MemStore,
+                       {BaseAddrNode, OffsetNode,
+                        SrcNode});
+    BaseAddrNode->Users.push_back(N);
+    OffsetNode->Users.push_back(N);
+    SrcNode->Users.push_back(N);
+    G->InsertNode(N);
     return N;
   }
 
- private:
+private:
   Node* SrcNode;
 };
 
 Node* FindNearestCtrlPoint(Node* N);
-}
-
-#endif  // GRAPHIR_GRAPH_NODEUTILS_H
+} // end namespace graphir
+#endif

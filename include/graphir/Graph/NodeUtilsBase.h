@@ -1,80 +1,80 @@
-#ifndef GRAPHIR_GRAPH_NODEUTILSBASE_H
-#define GRAPHIR_GRAPH_NODEUTILSBASE_H
-
-#include "graphir/Graph/Graph.h"
+#ifndef GRAPHIR_GRAPH_NODE_UTILS_BASE_H
+#define GRAPHIR_GRAPH_NODE_UTILS_BASE_H
 #include "graphir/Graph/Node.h"
+#include "graphir/Graph/Graph.h"
 
 namespace graphir {
-
-template <IrOpcode::ID OP>
+template<IrOpcode::ID Op>
 class NodePropertiesBase {
- protected:
-  Node* node_ptr_;
+protected:
+  Node* NodePtr;
 
-  NodePropertiesBase(Node* node) : node_ptr_(node) {}
+  NodePropertiesBase(Node* N)
+    : NodePtr(N) {}
 
- public:
-  operator bool() const { return node_ptr_ && node_ptr_->op_ == OP; }
+public:
+  operator bool() const {
+    return NodePtr && NodePtr->Op == Op;
+  }
 };
 
-template <IrOpcode::ID OP>
-struct NodeProperties : public NodePropertiesBase<OP> {
-  NodeProperties(Node* node) : NodePropertiesBase<OP>(node) {}
+template<IrOpcode::ID Op>
+struct NodeProperties : public NodePropertiesBase<Op> {
+  NodeProperties(Node* N)
+    : NodePropertiesBase<Op>(N) {}
 };
 
-#define NODE_PROPERTIES(OP)           \
-  template <>                         \
-  struct NodeProperties<IrOpcode::OP> \
-      : public NodePropertiesBase<IrOpcode::OP>
-
+#define NODE_PROPERTIES(OP) \
+  template<>  \
+  struct NodeProperties<IrOpcode::OP> : public NodePropertiesBase<IrOpcode::OP>
 #define NODE_PROPERTIES_VIRT(OP, VIRTOP) \
-  template <>                            \
-  struct NodeProperties<IrOpcode::OP>    \
-      : public NodeProperties<IrOpcode::VIRTOP>
+  template<>  \
+  struct NodeProperties<IrOpcode::OP> : public NodeProperties<IrOpcode::VIRTOP>
 
-#define NODE_PROP_BASE(OP, NODE)     NodePropertiesBase<IrOpcode::OP>(NODE)
-#define NODE_PROP_VIRT(VIRTOP, NODE) NodeProperties<IrOpcode::VIRTOP>(NODE)
+#define NODE_PROP_BASE(OP, NODE) \
+  NodePropertiesBase<IrOpcode::OP>(NODE)
+#define NODE_PROP_VIRT(VIRTOP, NODE)  \
+  NodeProperties<IrOpcode::VIRTOP>(NODE)
 
-template <IrOpcode::ID OC>
+template<IrOpcode::ID OC>
 struct NodeBuilder {
-  NodeBuilder(Graph* graph) : graph_(graph) {}
+  NodeBuilder(Graph* graph) : G(graph) {}
 
   Node* Build() {
-    auto* node = new Node(OC, {});
-    graph_->InsertNode(node);
-    return node;
+    // default implementation
+    auto* N = new Node(OC, {});
+    G->InsertNode(N);
+    return N;
   }
 
- private:
-  Graph* graph_;
+private:
+  Graph* G;
 };
 
-namespace internal {
-
-template <IrOpcode::ID OC, class DerivedT = NodeBuilder<OC>>
+namespace _internal {
+template<IrOpcode::ID OC,
+         class DerivedT = NodeBuilder<OC>>
 class MemNodeBuilder {
-  inline DerivedT& derived() { return *static_cast<DerivedT*>(this); }
+  inline
+  DerivedT& derived() { return *static_cast<DerivedT*>(this); }
 
- public:
-  MemNodeBuilder(Graph* graph) : graph_(graph) {}
+public:
+  MemNodeBuilder(Graph* graph)
+    : G(graph) {}
 
-  DerivedT& BaseAddr(Node* base_addr) {
-    base_addr_node_ = base_addr;
+  DerivedT& BaseAddr(Node* N) {
+    BaseAddrNode = N;
+    return derived();
+  }
+  DerivedT& Offset(Node* N) {
+    OffsetNode = N;
     return derived();
   }
 
-  DerivedT& Offset(Node* offset) {
-    offset_node_ = offset;
-    return derived();
-  }
-
- protected:
-  Graph* graph_;
-  Node *base_addr_node_, *offset_node_;
+protected:
+  Graph* G;
+  Node *BaseAddrNode, *OffsetNode;
 };
-
-}  // namespace internal
-
-}  // namespace graphir
-
-#endif  // GRAPHIR_GRAPH_NODEUTILSBASE_H
+} // end namespace _internal
+} // end namespace graphir
+#endif

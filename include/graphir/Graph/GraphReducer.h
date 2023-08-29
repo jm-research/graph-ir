@@ -1,126 +1,147 @@
 #ifndef GRAPHIR_GRAPH_GRAPHREDUCER_H
 #define GRAPHIR_GRAPH_GRAPHREDUCER_H
-
-#include <utility>
-
 #include "graphir/Graph/Graph.h"
 #include "graphir/Graph/Node.h"
 #include "graphir/Graph/NodeMarker.h"
+#include <utility>
 
 namespace graphir {
-
 struct GraphReduction {
-  explicit GraphReduction(Node* node = nullptr) : replacement_node_(node) {}
+  explicit GraphReduction(Node* N = nullptr)
+    : ReplacementNode(N) {}
 
-  Node* Replacement() const { return replacement_node_; }
+  Node* Replacement() const { return ReplacementNode; }
   bool Changed() const { return Replacement() != nullptr; }
 
- private:
-  Node* replacement_node_;
+private:
+  Node* ReplacementNode;
 };
 
-namespace detail {
+// template<class T>
+// concept ReducerConcept = requires(T& R, Node* N) {
+//  { R::name() } -> const char*;
+//  { R.Reduce(N) } -> GraphReduction;
+// };
 
+namespace _detail {
+// abstract base class used to dispatch
+// polymorphically over reducer objects
 struct ReducerConcept {
   virtual const char* name() const = 0;
 
-  virtual GraphReduction Reduce(Node* node) = 0;
+  virtual GraphReduction Reduce(Node* N) = 0;
 };
 
-template <class ReducerT, class... CtorArgs>
+// a template wrapper used to implement the polymorphic API
+template<class ReducerT, class... CtorArgs>
 struct ReducerModel : public ReducerConcept {
-  ReducerModel(CtorArgs&&... args)
-      : reducer_(std::forward<CtorArgs>(args)...) {}
+  ReducerModel(CtorArgs &&... args)
+    : Reducer(std::forward<CtorArgs>(args)...) {}
 
-  GraphReduction Reduce(Node* node) override { return reducer_.Reduce(node); }
+  GraphReduction Reduce(Node* N) override {
+    return Reducer.Reduce(N);
+  }
 
   const char* name() const override { return ReducerT::name(); }
 
- private:
-  ReducerT reducer_;
+private:
+  ReducerT Reducer;
 };
+} // end namespace _detail
 
-}  // namespace detail
-
+/// Mixin for reducer to modify other nodes
 struct GraphEditor {
   struct Interface {
-    virtual ~Interface() = default;
+    virtual ~Interface() {}
 
-    virtual void Replace(Node* node, Node* replacement) = 0;
-    virtual void Revisit(Node* node) = 0;
+    virtual void Replace(Node* N, Node* Replacement) = 0;
+    virtual void Revisit(Node* N) = 0;
 
     virtual Graph& GetGraph() = 0;
   };
 
- protected:
-  explicit GraphEditor(Interface* editor) : editor_(editor) {}
+protected:
+  Interface* Editor;
 
-  Graph& GetGraph() { return editor_->GetGraph(); }
+  explicit GraphEditor(Interface* editor) : Editor(editor) {}
 
-  void Replace(Node* node, Node* replacement) {
-    editor_->Replace(node, replacement);
+  // some utility for subclass
+  Graph& GetGraph() {
+    return Editor->GetGraph();
   }
-
-  void Revisit(Node* node) { editor_->Revisit(node); }
-
-  static GraphReduction Replace(Node* node) { return GraphReduction(node); }
-
-  static GraphReduction NoChange() { return GraphReduction(); }
-
-  Interface* editor_;
+  void Replace(Node* N, Node* Replacement) {
+    Editor->Replace(N, Replacement);
+  }
+  void Revisit(Node* N) {
+    Editor->Revisit(N);
+  }
+  // for single node reduction
+  static GraphReduction Replace(Node* N) {
+    return GraphReduction(N);
+  }
+  static GraphReduction NoChange() {
+    return GraphReduction();
+  }
 };
 
+/// The primary graph reduction algorithm implement
 class GraphReducer : public GraphEditor::Interface {
   enum class ReductionState : uint8_t {
-    Unvisited = 0,  // Default state
-    Revisit,        // Revisit later
-    OnStack,        // Observed and on stack
-    Visited         // Finished
+    Unvisited = 0, // Default state
+    Revisit,       // Revisit later
+    OnStack,       // Observed and on stack
+    Visited        // Finished
   };
 
   struct DFSVisitor;
 
-  Graph& graph_;
-  Node* dead_node_;
+  Graph& G;
+  Node* DeadNode;
 
-  std::vector<Node*> reduction_stack_, revisit_stack_;
-  NodeMarker<ReductionState> rs_marker_;
+  // visiting stacks
+  std::vector<Node*> ReductionStack, RevisitStack;
 
-  bool do_trim_graph_;
+  // visiting marker
+  NodeMarker<ReductionState> RSMarker;
 
-  GraphReducer(Graph& graph, bool trim_graph = true);
+  bool DoTrimGraph;
 
-  void Replace(Node* node, Node* replacement) override;
-  void Revisit(Node* node) override;
-  Graph& GetGraph() override { return graph_; }
+  GraphReducer(Graph& graph, bool TrimGraph = true);
 
-  void Push(Node* node);
+  // implement GraphEditor::Interface
+  void Replace(Node* N, Node* Replacement) override;
+  void Revisit(Node* N) override;
+  Graph& GetGraph() override { return G; }
+
+  void Push(Node* N);
   void Pop();
-  bool Recurse(Node* node);
+  // conditionally revisit
+  bool Recurse(Node* N);
 
-  void DFSVisit(SubGraph& sg, NodeMarker<ReductionState>& marker);
+  void DFSVisit(SubGraph& SG, NodeMarker<ReductionState>& Marker);
 
-  void RunImpl(detail::ReducerConcept* reducer);
-  void RunOnFunctionGraph(SubGraph& sg, detail::ReducerConcept* reducer);
+  void runImpl(_detail::ReducerConcept* R);
+  void runOnFunctionGraph(SubGraph& SG, _detail::ReducerConcept* R);
 
- public:
-  template <class ReducerT, class... Args>
-  static void Run(Graph& graph, Args&&... ctor_args) {
-    GraphReducer gr(graph);
-    detail::ReducerModel<ReducerT, Args...> rm(
-        std::forward<Args>(ctor_args)...);
-    gr.RunImpl(&rm);
+public:
+  template<class ReducerT, class... Args>
+  static void Run(Graph& G, Args &&... CtorArgs) {
+    GraphReducer GR(G);
+    _detail::ReducerModel<ReducerT, Args...> RM(
+      std::forward<Args>(CtorArgs)...
+    );
+    GR.runImpl(&RM);
   }
 
-  template <class ReducerT, class... Args>
-  static void RunWithEditor(Graph& graph, Args&&... ctor_args) {
-    GraphReducer gr(graph);
-    detail::ReducerModel<ReducerT, GraphEditor::Interface*, Args...> rm(
-        &gr, std::forward<Args>(ctor_args)...);
-    gr.RunImpl(&rm);
+  template<class ReducerT, class... Args>
+  static void RunWithEditor(Graph& G, Args &&...CtorArgs) {
+    GraphReducer GR(G);
+    _detail::ReducerModel<ReducerT, GraphEditor::Interface*, Args...> RM(
+      &GR, // first argument must be GraphEditor::Interface*
+      std::forward<Args>(CtorArgs)...
+    );
+    GR.runImpl(&RM);
   }
 };
-
-}  // namespace graphir
-
-#endif  // GRAPHIR_GRAPH_GRAPHREDUCER_H
+} // end namespace graphir
+#endif
