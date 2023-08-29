@@ -1,5 +1,5 @@
-#ifndef GROSS_GRAPH_ATTRIBUTE_H
-#define GROSS_GRAPH_ATTRIBUTE_H
+#ifndef GRAPHIR_GRAPH_ATTRIBUTE_H
+#define GRAPHIR_GRAPH_ATTRIBUTE_H
 #include "graphir/Graph/Node.h"
 
 namespace graphir {
